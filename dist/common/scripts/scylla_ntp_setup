@@ -83,11 +83,7 @@ if __name__ == '__main__':
         if not target:
             target = 'ntp'
     if not target:
-        if is_redhat_variant():
-            target = 'chrony'
-        else:
-            target = 'systemd-timesyncd'
-
+        target = 'chrony' if is_redhat_variant() else 'systemd-timesyncd'
     print(f'Use {target} to configure ntp')
     if target == 'systemd-timesyncd':
         if not os.path.exists('/lib/systemd/systemd-timesyncd'):
@@ -102,7 +98,13 @@ if __name__ == '__main__':
         with confp.open() as f:
             conf = f.read()
         if args.subdomain:
-            conf2 = re.sub(r'pool\s+([0-9]+)\.(\S+)\.pool\.ntp\.org', 'pool \\1.{}.pool.ntp.org'.format(args.subdomain), conf, flags=re.MULTILINE)
+            conf2 = re.sub(
+                r'pool\s+([0-9]+)\.(\S+)\.pool\.ntp\.org',
+                f'pool \\1.{args.subdomain}.pool.ntp.org',
+                conf,
+                flags=re.MULTILINE,
+            )
+
             with confp.open(confpath, 'w') as f:
                 f.write(conf2)
             conf = conf2
@@ -119,12 +121,18 @@ if __name__ == '__main__':
         with confp.open() as f:
             conf = f.read()
         if args.subdomain:
-            conf2 = re.sub(r'(server|pool)\s+([0-9]+)\.(\S+)\.pool\.ntp\.org', '\\1 \\2.{}.pool.ntp.org'.format(args.subdomain), conf, flags=re.MULTILINE)
+            conf2 = re.sub(
+                r'(server|pool)\s+([0-9]+)\.(\S+)\.pool\.ntp\.org',
+                f'\\1 \\2.{args.subdomain}.pool.ntp.org',
+                conf,
+                flags=re.MULTILINE,
+            )
+
             with confp.open(confpath, 'w') as f:
                 f.write(conf2)
             conf = conf2
         match = re.search(r'^(server|pool)\s+(\S*)(\s+\S+)?', conf, flags=re.MULTILINE)
-        server = match.group(2)
+        server = match[2]
         ntpd = get_ntpd_unit()
         ntpd.stop()
         run(f'ntpdate {server}', shell=True, check=True)

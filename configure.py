@@ -112,16 +112,26 @@ def pkgname(name):
 def get_flags():
     with open('/proc/cpuinfo') as f:
         for line in f:
-            if line.strip():
-                if line.rstrip('\n').startswith('flags'):
-                    return re.sub(r'^flags\s+: ', '', line).split()
+            if line.strip() and line.rstrip('\n').startswith('flags'):
+                return re.sub(r'^flags\s+: ', '', line).split()
 
 
 def add_tristate(arg_parser, name, dest, help):
-    arg_parser.add_argument('--enable-' + name, dest=dest, action='store_true', default=None,
-                            help='Enable ' + help)
-    arg_parser.add_argument('--disable-' + name, dest=dest, action='store_false', default=None,
-                            help='Disable ' + help)
+    arg_parser.add_argument(
+        f'--enable-{name}',
+        dest=dest,
+        action='store_true',
+        default=None,
+        help=f'Enable {help}',
+    )
+
+    arg_parser.add_argument(
+        f'--disable-{name}',
+        dest=dest,
+        action='store_false',
+        default=None,
+        help=f'Disable {help}',
+    )
 
 
 def apply_tristate(var, test, note, missing):
@@ -147,7 +157,7 @@ def pkg_config(package, *options):
     # specified instead of a name.
     if package.endswith('.pc'):
         local_path = os.path.dirname(package)
-        pkg_config_path = '{}:{}'.format(local_path, pkg_config_path)
+        pkg_config_path = f'{local_path}:{pkg_config_path}'
 
     output = subprocess.check_output(['pkg-config'] + list(options) + [package],
                                      env = {**os.environ,
@@ -226,7 +236,7 @@ def linker_flags(compiler):
 
 def maybe_static(flag, libs):
     if flag and not args.static:
-        libs = '-Wl,-Bstatic {} -Wl,-Bdynamic'.format(libs)
+        libs = f'-Wl,-Bstatic {libs} -Wl,-Bdynamic'
     return libs
 
 
@@ -255,8 +265,11 @@ class Thrift(Source):
 
     def generated(self, gen_dir):
         basename = os.path.splitext(os.path.basename(self.source))[0]
-        files = [basename + '_' + ext
-                 for ext in ['types.cpp', 'types.h', 'constants.cpp', 'constants.h']]
+        files = [
+            f'{basename}_{ext}'
+            for ext in ['types.cpp', 'types.h', 'constants.cpp', 'constants.h']
+        ]
+
         files += [self.service + ext
                   for ext in ['.cpp', '.h']]
         return [os.path.join(gen_dir, file) for file in files]
@@ -285,7 +298,10 @@ class Json2Code(Source):
         Source.__init__(self, source, '.hh', '.cc')
 
     def generated(self, gen_dir):
-        return [os.path.join(gen_dir, self.source + '.hh'), os.path.join(gen_dir, self.source + '.cc')]
+        return [
+            os.path.join(gen_dir, f'{self.source}.hh'),
+            os.path.join(gen_dir, f'{self.source}.cc'),
+        ]
 
 def find_headers(repodir, excluded_dirs):
     walker = os.walk(repodir)

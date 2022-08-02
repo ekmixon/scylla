@@ -47,8 +47,8 @@ from scripts import coverage
 
 output_is_a_tty = sys.stdout.isatty()
 
-all_modes = set(['debug', 'release', 'dev', 'sanitize', 'coverage'])
-debug_modes = set(['debug', 'sanitize'])
+all_modes = {'debug', 'release', 'dev', 'sanitize', 'coverage'}
+debug_modes = {'debug', 'sanitize'}
 
 
 def create_formatter(*decorators):
@@ -94,12 +94,16 @@ class TestSuite(ABC):
         self.no_parallel_cases = set(cfg.get("no_parallel_cases", []))
         disabled = self.cfg.get("disable", [])
         non_debug = self.cfg.get("skip_in_debug_modes", [])
-        self.enabled_modes = dict()
-        self.disabled_tests = dict()
+        self.enabled_modes = {}
+        self.disabled_tests = {}
         for mode in all_modes:
-            self.disabled_tests[mode] = \
-                set(self.cfg.get("skip_in_" + mode, []) + (non_debug if mode in debug_modes else []) + disabled)
-            for shortname in set(self.cfg.get("run_in_" + mode, [])):
+            self.disabled_tests[mode] = set(
+                self.cfg.get(f"skip_in_{mode}", [])
+                + (non_debug if mode in debug_modes else [])
+                + disabled
+            )
+
+            for shortname in set(self.cfg.get(f"run_in_{mode}", [])):
                 self.enabled_modes[shortname] = self.enabled_modes.get(shortname, []) + [mode]
 
     @property
@@ -116,7 +120,7 @@ class TestSuite(ABC):
         with open(os.path.join(path, "suite.yaml"), "r") as cfg_file:
             cfg = yaml.safe_load(cfg_file.read())
             if not isinstance(cfg, dict):
-                raise RuntimeError("Failed to load tests in {}: suite.yaml is empty".format(path))
+                raise RuntimeError(f"Failed to load tests in {path}: suite.yaml is empty")
             return cfg
 
     @staticmethod
@@ -128,10 +132,16 @@ class TestSuite(ABC):
             cfg = TestSuite.load_cfg(path)
             kind = cfg.get("type")
             if kind is None:
-                raise RuntimeError("Failed to load tests in {}: suite.yaml has no suite type".format(path))
-            SpecificTestSuite = globals().get(kind.title() + "TestSuite")
+                raise RuntimeError(
+                    f"Failed to load tests in {path}: suite.yaml has no suite type"
+                )
+
+            SpecificTestSuite = globals().get(f"{kind.title()}TestSuite")
             if not SpecificTestSuite:
-                raise RuntimeError("Failed to load tests in {}: suite type '{}' not found".format(path, kind))
+                raise RuntimeError(
+                    f"Failed to load tests in {path}: suite type '{kind}' not found"
+                )
+
             suite = SpecificTestSuite(path, cfg)
             TestSuite.suites[path] = suite
         return suite
@@ -169,13 +179,13 @@ class TestSuite(ABC):
                 continue
 
             t = os.path.join(self.name, shortname)
-            patterns = options.name if options.name else [t]
+            patterns = options.name or [t]
             if options.skip_pattern and options.skip_pattern in t:
                 continue
 
             for p in patterns:
                 if p in t:
-                    for i in range(options.repeat):
+                    for _ in range(options.repeat):
                         self.add_test(shortname, mode, options)
 
 
@@ -279,8 +289,11 @@ class Test:
         self.mode = mode
         self.suite = suite
         # Unique file name, which is also readable by human, as filename prefix
-        self.uname = "{}.{}".format(self.shortname, self.id)
-        self.log_filename = os.path.join(options.tmpdir, self.mode, self.uname + ".log")
+        self.uname = f"{self.shortname}.{self.id}"
+        self.log_filename = os.path.join(
+            options.tmpdir, self.mode, f"{self.uname}.log"
+        )
+
         self.success = None
 
     @abstractmethod
@@ -298,7 +311,6 @@ class Test:
         """Check and trim logs and xml output for tests which have it"""
         if trim:
             pathlib.Path(self.log_filename).unlink()
-        pass
 
 
 class UnitTest(Test):
@@ -309,13 +321,10 @@ class UnitTest(Test):
         super().__init__(test_no, shortname, suite, mode, options)
         self.path = os.path.join("build", self.mode, "test", self.name)
         self.args = shlex.split(args) + UnitTest.standard_args
-        if self.mode == "coverage":
-            self.env = coverage.env(self.path)
-        else:
-            self.env = dict()
+        self.env = coverage.env(self.path) if self.mode == "coverage" else {}
 
     def print_summary(self):
-        print("Output of {} {}:".format(self.path, " ".join(self.args)))
+        print(f'Output of {self.path} {" ".join(self.args)}:')
         print(read_log(self.log_filename))
 
     async def run(self, options):
@@ -330,12 +339,18 @@ class BoostTest(UnitTest):
     def __init__(self, test_no, shortname, args, suite, casename, mode, options):
         boost_args = []
         if casename:
-            shortname += '.' + casename
-            boost_args += ['--run_test=' + casename]
+            shortname += f'.{casename}'
+            boost_args += [f'--run_test={casename}']
         super().__init__(test_no, shortname, args, suite, mode, options)
-        self.xmlout = os.path.join(options.tmpdir, self.mode, "xml", self.uname + ".xunit.xml")
-        boost_args += ['--report_level=no',
-                       '--logger=HRF,test_suite:XML,test_suite,' + self.xmlout]
+        self.xmlout = os.path.join(
+            options.tmpdir, self.mode, "xml", f"{self.uname}.xunit.xml"
+        )
+
+        boost_args += [
+            '--report_level=no',
+            f'--logger=HRF,test_suite:XML,test_suite,{self.xmlout}',
+        ]
+
         boost_args += ['--catch_system_errors=no']  # causes undebuggable cores
         boost_args += ['--color_output=false']
         boost_args += ['--']
@@ -381,12 +396,14 @@ class CqlTest(Test):
         super().__init__(test_no, shortname, suite, mode, options)
         # Path to cql_repl driver, in the given build mode
         self.path = os.path.join("build", self.mode, "test/tools/cql_repl")
-        self.cql = os.path.join(suite.path, self.shortname + ".cql")
-        self.result = os.path.join(suite.path, self.shortname + ".result")
-        self.tmpfile = os.path.join(options.tmpdir, self.mode, self.uname + ".reject")
-        self.reject = os.path.join(suite.path, self.shortname + ".reject")
-        self.args = shlex.split("-c1 -m2G --input={} --output={} --log={}".format(
-            self.cql, self.tmpfile, self.log_filename))
+        self.cql = os.path.join(suite.path, f"{self.shortname}.cql")
+        self.result = os.path.join(suite.path, f"{self.shortname}.result")
+        self.tmpfile = os.path.join(options.tmpdir, self.mode, f"{self.uname}.reject")
+        self.reject = os.path.join(suite.path, f"{self.shortname}.reject")
+        self.args = shlex.split(
+            f"-c1 -m2G --input={self.cql} --output={self.tmpfile} --log={self.log_filename}"
+        )
+
         self.args += UnitTest.standard_args
         self.is_executed_ok = False
         self.is_new = False
@@ -395,7 +412,7 @@ class CqlTest(Test):
         if self.mode == "coverage":
             self.env = coverage.env(self.path, distinct_id=self.id)
         else:
-            self.env = dict()
+            self.env = {}
 
     async def run(self, options):
         self.is_executed_ok = await run_test(self, options, env=self.env)
@@ -434,8 +451,7 @@ class CqlTest(Test):
         return self
 
     def print_summary(self):
-        print("Test {} ({}) {}".format(palette.path(self.name), self.mode,
-                                       self.summary))
+        print(f"Test {palette.path(self.name)} ({self.mode}) {self.summary}")
         if self.is_equal_result is False:
             print_unidiff(self.result, self.reject)
 
@@ -445,18 +461,21 @@ class RunTest(Test):
     def __init__(self, test_no, shortname, suite, mode, options):
         super().__init__(test_no, shortname, suite, mode, options)
         self.path = os.path.join(suite.path, shortname)
-        self.xmlout = os.path.join(options.tmpdir, self.mode, "xml", self.uname + ".xunit.xml")
-        self.args = ["--junit-xml={}".format(self.xmlout)]
+        self.xmlout = os.path.join(
+            options.tmpdir, self.mode, "xml", f"{self.uname}.xunit.xml"
+        )
+
+        self.args = [f"--junit-xml={self.xmlout}"]
         self.scylla_path = os.path.join("build", self.mode, "scylla")
 
         if self.mode == "coverage":
             self.env = coverage.env(self.scylla_path, distinct_id=self.suite.name)
         else:
-            self.env = dict()
+            self.env = {}
         self.env['SCYLLA'] = self.scylla_path
 
     def print_summary(self):
-        print("Output of {} {}:".format(self.path, " ".join(self.args)))
+        print(f'Output of {self.path} {" ".join(self.args)}:')
         print(read_log(self.log_filename))
 
     async def run(self, options):
@@ -488,11 +507,13 @@ class TabularConsoleOutput:
     def print_progress(self, test):
         self.last_test_no += 1
         msg = "{:10s} {:^8s} {:^7s} {:8s} {}".format(
-            "[{}/{}]".format(self.last_test_no, self.test_count),
-            test.suite.name, test.mode[:7],
+            f"[{self.last_test_no}/{self.test_count}]",
+            test.suite.name,
+            test.mode[:7],
             palette.ok("[ PASS ]") if test.success else palette.fail("[ FAIL ]"),
-            test.uname
+            test.uname,
         )
+
         if self.verbose is False:
             if test.success:
                 print("\r" + " " * self.last_line_len, end="")
@@ -516,10 +537,10 @@ async def run_test(test, options, gentle_kill=False, env=dict()):
     with open(test.log_filename, "wb") as log:
 
         def report_error(error):
-            msg = "=== TEST.PY SUMMARY START ===\n"
-            msg += "{}\n".format(error)
+            msg = "=== TEST.PY SUMMARY START ===\n" + "{}\n".format(error)
             msg += "=== TEST.PY SUMMARY END ===\n"
             log.write(msg.encode(encoding="UTF-8"))
+
         process = None
         stdout = None
         logging.info("Starting test #%d: %s %s", test.id, test.path, " ".join(test.args))
@@ -573,8 +594,12 @@ async def run_test(test, options, gentle_kill=False, env=dict()):
                 test.check_log(not options.save_log_on_success)
             except Exception as e:
                 print("")
-                print(test.name + ": " + palette.crit("failed to parse XML output: {}".format(e)))
-                # return False
+                print(
+                    f"{test.name}: "
+                    + palette.crit("failed to parse XML output: {}".format(e))
+                )
+
+                            # return False
             return True
         except (asyncio.TimeoutError, asyncio.CancelledError) as e:
             if process is not None:
@@ -655,10 +680,22 @@ def parse_cmd_line():
     args = parser.parse_args()
 
     if not args.jobs:
-        if not args.cpus:
-            nr_cpus = multiprocessing.cpu_count()
-        else:
-            nr_cpus = int(subprocess.check_output(['taskset', '-c', args.cpus, 'python', '-c', 'import os; print(len(os.sched_getaffinity(0)))']))
+        nr_cpus = (
+            int(
+                subprocess.check_output(
+                    [
+                        'taskset',
+                        '-c',
+                        args.cpus,
+                        'python',
+                        '-c',
+                        'import os; print(len(os.sched_getaffinity(0)))',
+                    ]
+                )
+            )
+            if args.cpus
+            else multiprocessing.cpu_count()
+        )
 
         cpus_per_test_job = 1
         sysmem = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
@@ -716,7 +753,7 @@ def find_tests(options):
 
     if not TestSuite.test_count():
         if len(options.name):
-            print("Test {} not found".format(palette.path(options.name[0])))
+            print(f"Test {palette.path(options.name[0])} not found")
             sys.exit(1)
         else:
             print(palette.warn("No tests found. Please enable tests in ./configure.py first."))
@@ -729,7 +766,7 @@ def find_tests(options):
 async def run_all_tests(signaled, options):
     console = TabularConsoleOutput(options.verbose, TestSuite.test_count())
     signaled_task = asyncio.create_task(signaled.wait())
-    pending = set([signaled_task])
+    pending = {signaled_task}
 
     async def cancel(pending):
         for task in pending:
@@ -747,6 +784,7 @@ async def run_all_tests(signaled, options):
             if isinstance(result, bool):
                 continue    # skip signaled task result
             console.print_progress(result)
+
     console.print_start_blurb()
     try:
         for test in TestSuite.tests():
@@ -775,21 +813,24 @@ def read_log(log_filename):
             msg = log.read()
             return msg if len(msg) else "===Empty log output==="
     except FileNotFoundError:
-        return "===Log {} not found===".format(log_filename)
+        return f"===Log {log_filename} not found==="
     except OSError as e:
-        return "===Error reading log {}===".format(e)
+        return f"===Error reading log {e}==="
 
 
 def print_summary(failed_tests):
     if failed_tests:
-        print("The following test(s) have failed: {}".format(
-            palette.path(" ".join([t.name for t in failed_tests]))))
+        print(
+            f'The following test(s) have failed: {palette.path(" ".join([t.name for t in failed_tests]))}'
+        )
+
         if not output_is_a_tty:
             for test in failed_tests:
                 test.print_summary()
                 print("-"*78)
-        print("Summary: {} of the total {} tests failed".format(
-            len(failed_tests), TestSuite.test_count()))
+        print(
+            f"Summary: {len(failed_tests)} of the total {TestSuite.test_count()} tests failed"
+        )
 
 
 def print_unidiff(fromfile, tofile):
@@ -825,16 +866,18 @@ def write_junit_report(tmpdir, mode):
             if test.mode != mode:
                 continue
             total += 1
-            xml_res = ET.SubElement(xml_results, 'testcase',
-                                    name="{}.{}.{}".format(test.shortname, mode, test.id))
+            xml_res = ET.SubElement(
+                xml_results,
+                'testcase',
+                name=f"{test.shortname}.{mode}.{test.id}",
+            )
+
             if test.success is True:
                 continue
             failed += 1
             xml_fail = ET.SubElement(xml_res, 'failure')
-            xml_fail.text = "Test {} {} failed, check the log at {}".format(
-                test.path,
-                " ".join(test.args),
-                test.log_filename)
+            xml_fail.text = f'Test {test.path} {" ".join(test.args)} failed, check the log at {test.log_filename}'
+
     if total == 0:
         return
     xml_results.set("tests", str(total))
@@ -899,7 +942,7 @@ async def main():
 
     # Note: failure codes must be in the ranges 0-124, 126-127,
     #       to cooperate with git bisect's expectations
-    return 0 if not failed_tests else 1
+    return 1 if failed_tests else 0
 
 if __name__ == "__main__":
     colorama.init()

@@ -90,19 +90,36 @@ def test_update_expected_1_eq_set(test_table_s):
     p = random_string()
     # Because boto3 sorts the set values we give it, in order to generate a
     # set with a different order, we need to build it incrementally.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': set(['dog', 'chinchilla']), 'Action': 'PUT'}})
-    test_table_s.update_item(Key={'p': p},
-        UpdateExpression='ADD a :val1',
-        ExpressionAttributeValues={':val1': set(['cat', 'mouse'])})
-    # Sanity check - the attribute contains the set we think it does
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['chinchilla', 'cat', 'dog', 'mouse'])
-    # Now finally check that "Expected"'s equality check knows the equality too.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'b': {'Value': 3, 'Action': 'PUT'}},
-        Expected={'a': {'ComparisonOperator': 'EQ',
-                        'AttributeValueList': [set(['chinchilla', 'cat', 'dog', 'mouse'])]}}
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': {'dog', 'chinchilla'}, 'Action': 'PUT'}
+        },
     )
+
+    test_table_s.update_item(
+        Key={'p': p},
+        UpdateExpression='ADD a :val1',
+        ExpressionAttributeValues={':val1': {'cat', 'mouse'}},
+    )
+
+    # Sanity check - the attribute contains the set we think it does
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'chinchilla', 'cat', 'dog', 'mouse'}
+
+    # Now finally check that "Expected"'s equality check knows the equality too.
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'b': {'Value': 3, 'Action': 'PUT'}},
+        Expected={
+            'a': {
+                'ComparisonOperator': 'EQ',
+                'AttributeValueList': [{'chinchilla', 'cat', 'dog', 'mouse'}],
+            }
+        },
+    )
+
     assert 'b' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
 
 def test_update_expected_1_eq_false(test_table_s):
@@ -259,7 +276,10 @@ def test_update_expected_1_le_validation(test_table_s):
             Expected={'b': {'ComparisonOperator': 'LE',
                             'AttributeValueList': [3]}}
         )
-    assert not 'z' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
+    assert (
+        'z'
+        not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
+    )
 
 # Tests for Expected with ComparisonOperator = "LT":
 def test_update_expected_1_lt(test_table_s):
@@ -560,11 +580,16 @@ def test_update_expected_1_contains(test_table_s):
     # true cases. CONTAINS can be used for two unrelated things: check substrings
     # (in string or binary) and membership (in set or list).
     p = random_string()
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': 'hello', 'Action': 'PUT'},
-                          'b': {'Value': set([2, 4, 7]), 'Action': 'PUT'},
-                          'c': {'Value': [2, 4, 7], 'Action': 'PUT'},
-                          'd': {'Value': bytearray('hi there', 'utf-8'), 'Action': 'PUT'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': 'hello', 'Action': 'PUT'},
+            'b': {'Value': {2, 4, 7}, 'Action': 'PUT'},
+            'c': {'Value': [2, 4, 7], 'Action': 'PUT'},
+            'd': {'Value': bytearray('hi there', 'utf-8'), 'Action': 'PUT'},
+        },
+    )
+
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'z': {'Value': 2, 'Action': 'PUT'}},
         Expected={'a': {'ComparisonOperator': 'CONTAINS', 'AttributeValueList': ['ell']}}
@@ -646,11 +671,16 @@ def test_update_expected_1_not_contains(test_table_s):
     # true cases. NOT_CONTAINS can be used for two unrelated things: check substrings
     # (in string or binary) and membership (in set or list).
     p = random_string()
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': 'hello', 'Action': 'PUT'},
-                          'b': {'Value': set([2, 4, 7]), 'Action': 'PUT'},
-                          'c': {'Value': [2, 4, 7], 'Action': 'PUT'},
-                          'd': {'Value': bytearray('hi there', 'utf-8'), 'Action': 'PUT'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': 'hello', 'Action': 'PUT'},
+            'b': {'Value': {2, 4, 7}, 'Action': 'PUT'},
+            'c': {'Value': [2, 4, 7], 'Action': 'PUT'},
+            'd': {'Value': bytearray('hi there', 'utf-8'), 'Action': 'PUT'},
+        },
+    )
+
 
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'z': {'Value': 2, 'Action': 'PUT'}},
@@ -793,9 +823,14 @@ def test_update_expected_1_in(test_table_s):
     # whether the attribute value is in the give list of values. It does NOT
     # do the opposite - testing whether certain items are in a set attribute.
     p = random_string()
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': set([2, 4, 7]), 'Action': 'PUT'},
-                          'c': {'Value': 3, 'Action': 'PUT'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': {2, 4, 7}, 'Action': 'PUT'},
+            'c': {'Value': 3, 'Action': 'PUT'},
+        },
+    )
+
     # true cases:
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'z': {'Value': 2, 'Action': 'PUT'}},
@@ -843,11 +878,16 @@ def test_update_expected_1_in(test_table_s):
 # Tests for Expected with ComparisonOperator = "BETWEEN":
 def test_update_expected_1_between(test_table_s):
     p = random_string()
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': 2, 'Action': 'PUT'},
-                          'b': {'Value': 'cat', 'Action': 'PUT'},
-                          'c': {'Value': bytearray('cat', 'utf-8'), 'Action': 'PUT'},
-                          'd': {'Value': set([2, 4, 7]), 'Action': 'PUT'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': 2, 'Action': 'PUT'},
+            'b': {'Value': 'cat', 'Action': 'PUT'},
+            'c': {'Value': bytearray('cat', 'utf-8'), 'Action': 'PUT'},
+            'd': {'Value': {2, 4, 7}, 'Action': 'PUT'},
+        },
+    )
+
     # true cases:
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'z': {'Value': 2, 'Action': 'PUT'}},
@@ -914,9 +954,16 @@ def test_update_expected_1_between(test_table_s):
             AttributeUpdates={'z': {'Value': 2, 'Action': 'PUT'}},
             Expected={'a': {'ComparisonOperator': 'BETWEEN', 'AttributeValueList': [4, 'dog']}})
     with pytest.raises(ClientError, match='ValidationException'):
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             AttributeUpdates={'z': {'Value': 2, 'Action': 'PUT'}},
-            Expected={'d': {'ComparisonOperator': 'BETWEEN', 'AttributeValueList': [set([1]), set([2])]}})
+            Expected={
+                'd': {
+                    'ComparisonOperator': 'BETWEEN',
+                    'AttributeValueList': [{1}, {2}],
+                }
+            },
+        )
 
 # BETWEEN work only on numbers, strings or bytes. As noted in issue #8043,
 # if any other type is included in *the query*, the result should be a
@@ -943,7 +990,10 @@ def test_update_expected_1_between_validation(test_table_s):
             Expected={'b': {'ComparisonOperator': 'BETWEEN',
                             'AttributeValueList': [1,2]}}
         )
-    assert not 'z' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
+    assert (
+        'z'
+        not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
+    )
 
 
 ##############################################################################
@@ -1149,7 +1199,7 @@ def test_delete_item_expected(test_table_s):
         test_table_s.delete_item(Key={'p': p}, Expected={'a': {'Value': 2}})
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': 1}
     test_table_s.delete_item(Key={'p': p}, Expected={'a': {'Value': 1}})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
 
 def test_put_item_expected(test_table_s):
     p = random_string()

@@ -40,7 +40,7 @@ args = ap.parse_args()
 
 def debug(s, level=1):
     if level <= args.debug:
-        print('DEBUG[{}] {}'.format(level, s))
+        print(f'DEBUG[{level}] {s}')
 
 class Token:
     class Type(Enum):
@@ -59,15 +59,12 @@ class Token:
         self.length = None
 
     def __repr__(self):
-        return "Token:<{} depth={} len={} content='{}'>".format(self.type, self.depth, self.len(), self.content)
+        return f"Token:<{self.type} depth={self.depth} len={self.len()} content='{self.content}'>"
 
     def measure(self):
         if self.type != Token.Type.Compound:
             return len(self.content)
-        l = 0
-        for t in self.content:
-            l += t.len()
-        return l
+        return sum(t.len() for t in self.content)
 
     def len(self):
         if self.length is None:
@@ -75,8 +72,10 @@ class Token:
         return self.length
 
     def singleline(self):
-        return (self.type != Token.Type.Compound and self.type != Token.Type.Word) or \
-               self.len() <= int(args.maxwidth)
+        return self.type not in [
+            Token.Type.Compound,
+            Token.Type.Word,
+        ] or self.len() <= int(args.maxwidth)
 
     def indentation(self, indent=None):
         if not indent:
@@ -84,7 +83,10 @@ class Token:
         return '\n' + indent * self.depth
 
     def format(self, depth=0, nested=False):
-        debug("Format depth={} nested={} singleline={} {}".format(depth, nested, self.singleline(), self))
+        debug(
+            f"Format depth={depth} nested={nested} singleline={self.singleline()} {self}"
+        )
+
         s = ''
         if self.type != Token.Type.Compound:
             if not self.singleline() and nested:
@@ -103,18 +105,14 @@ class Token:
         opened = False
         for t in self.content:
             if t.type == Token.Type.Space and \
-               (indent or (last and last.type == Token.Type.Comma)):
+                   (indent or (last and last.type == Token.Type.Comma)):
                 continue
             last = t
             if indent and t.type != Token.Type.Comma:
                 s += indentation
-            indent = False
-
             s += t.format(depth=depth+1, nested=opened)
 
-            if t.type == Token.Type.Comma or (opened and not t.singleline()):
-                indent = True
-
+            indent = bool(t.type == Token.Type.Comma or (opened and not t.singleline()))
             if t.type == Token.Type.Open:
                 opened = True
             elif t.type == Token.Type.Close:
@@ -133,7 +131,7 @@ class Token:
             self.queue = None
 
         def debug_token(self, desc, t, debug_level=2):
-            debug("{} {}".format(desc, t), debug_level)
+            debug(f"{desc} {t}", debug_level)
             return t
 
         def lex(self, line):
@@ -163,10 +161,10 @@ class Token:
                     break
                 elif t.depth > depth:
                     t = self.parse_tokens(t.depth)
-                    tokens.append(self.debug_token("Appending nested depth={}".format(depth), t, 3))
+                    tokens.append(self.debug_token(f"Appending nested depth={depth}", t, 3))
                 else:
                     self.queue.popleft()
-                    tokens.append(self.debug_token("Appending depth={}".format(depth), t, 3))
+                    tokens.append(self.debug_token(f"Appending depth={depth}", t, 3))
 
             if tokens and tokens[0].type == Token.Type.Space:
                 tokens.popleft()
@@ -178,10 +176,10 @@ class Token:
                 ret = tokens[0]
             else:
                 ret = Token(tokens, Token.Type.Compound, depth)
-            return self.debug_token("Return depth={}".format(depth), ret)
+            return self.debug_token(f"Return depth={depth}", ret)
 
         def parse(self, line):
-            debug("Parse: '{}'".format(line), 1)
+            debug(f"Parse: '{line}'", 1)
             self.queue = deque(Token.Parser().lex(line))
             return self.parse_tokens()
 
@@ -197,9 +195,8 @@ if args.strings:
         if s == '-':
             parse_file(sys.stdin)
         elif path.exists(s):
-            f = open(s, "r")
-            parse_file(f)
-            f.close()
+            with open(s, "r") as f:
+                parse_file(f)
         else:
             parse_line(s)
 else:

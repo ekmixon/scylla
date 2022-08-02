@@ -41,12 +41,12 @@ _smp = r"(?:\s*--smp" + _scyllaeq + r"(?P<smp>\d+))"
 
 
 def _reopt(s):
-    return s + r"?"
+    return f"{s}?"
 
 
 def is_developer_mode():
-    f = open(etcdir() + "/scylla.d/dev-mode.conf", "r")
-    pattern = re.compile(_nocomment + r".*developer-mode" + _scyllaeq + "(1|true)")
+    f = open(f"{etcdir()}/scylla.d/dev-mode.conf", "r")
+    pattern = re.compile(f"{_nocomment}.*developer-mode{_scyllaeq}(1|true)")
     return len([x for x in f if pattern.match(x)]) >= 1
 
 class scylla_cpuinfo:
@@ -55,14 +55,10 @@ class scylla_cpuinfo:
     to run, how many total threads exist in the system, etc"""
 
     def __parse_cpuset(self):
-        f = open(etcdir() + "/scylla.d/cpuset.conf", "r")
+        f = open(f"{etcdir()}/scylla.d/cpuset.conf", "r")
         pattern = re.compile(_nocomment + r"CPUSET=\s*\"" + _reopt(_cpuset) + _reopt(_smp) + "\s*\"")
         grp = [pattern.match(x) for x in f.readlines() if pattern.match(x)]
-        if not grp:
-            d = {"cpuset": None, "smp": None}
-        else:
-            # if more than one, use last
-            d = grp[-1].groupdict()
+        d = grp[-1].groupdict() if grp else {"cpuset": None, "smp": None}
         actual_set = set()
         if d["cpuset"]:
             groups = d["cpuset"].split(",")
@@ -102,7 +98,7 @@ class scylla_cpuinfo:
 
     def system_nr_cores(self):
         """Returns the number of cores available in the system"""
-        return len(set([x['core id'] for x in list(self._cpu_data["system"].values())]))
+        return len({x['core id'] for x in list(self._cpu_data["system"].values())})
 
     def cpuset(self):
         """Returns the current cpuset Scylla is configured to use. Returns None if no constraints exist"""
@@ -122,58 +118,69 @@ class scylla_cpuinfo:
             return len(self._cpu_data["system"])
 
 def run_iotune():
-            if "SCYLLA_CONF" in os.environ:
-                conf_dir = os.environ["SCYLLA_CONF"]
-            else:
-                conf_dir = etcdir() + "/scylla"
-            cfg = yaml.safe_load(open(os.path.join(conf_dir, "scylla.yaml")))
-            default_path = cfg.get('workdir') or datadir()
-            if not "data_file_directories" in cfg:
-                cfg["data_file_directories"] = [os.path.join(default_path, 'data')]
-            data_dirs = cfg["data_file_directories"]
+    if "SCYLLA_CONF" in os.environ:
+        conf_dir = os.environ["SCYLLA_CONF"]
+    else:
+        conf_dir = f"{etcdir()}/scylla"
+    cfg = yaml.safe_load(open(os.path.join(conf_dir, "scylla.yaml")))
+    default_path = cfg.get('workdir') or datadir()
+    if "data_file_directories" not in cfg:
+        cfg["data_file_directories"] = [os.path.join(default_path, 'data')]
+    data_dirs = cfg["data_file_directories"]
 
-            for t in [ "commitlog", "hints", "view_hints", "saved_caches" ]:
-                key = "%s_directory" % t
-                if key in cfg:
-                    data_dirs += [ cfg[key] ]
-                elif os.path.isdir(os.path.join(default_path, t)):
-                    data_dirs += [ os.path.join(default_path, t) ]
+    for t in [ "commitlog", "hints", "view_hints", "saved_caches" ]:
+        key = f"{t}_directory"
+        if key in cfg:
+            data_dirs += [ cfg[key] ]
+        elif os.path.isdir(os.path.join(default_path, t)):
+            data_dirs += [ os.path.join(default_path, t) ]
 
-            iotune_args = []
-            for data_dir in data_dirs:
-                if os.path.exists(data_dir) == False:
-                    logging.error("%s was not found. Please check the configuration and run scylla_io_setup again.\n", data_dir)
-                    sys.exit(1)
-                if os.path.isdir(data_dir) == False:
-                    logging.error("%s is not a directory. Please check the configuration and run scylla_io_setup again.\n", data_dir)
-                    sys.exit(1)
-                st = os.statvfs(data_dir)
-                avail = st.f_bavail * st.f_frsize
-                rec = 10000000000
-                if avail < rec:
-                    logging.error("Filesystem at %s has only %d bytes available; that is less than the recommended 10 GB. Please free up space and run scylla_io_setup again.\n", data_dir, avail)
-                    sys.exit(1)
-                blocktune.tune_fs(data_dir, '2')
-                iotune_args += [ "--evaluation-directory", data_dir ]
+    iotune_args = []
+    for data_dir in data_dirs:
+        if os.path.exists(data_dir) == False:
+            logging.error("%s was not found. Please check the configuration and run scylla_io_setup again.\n", data_dir)
+            sys.exit(1)
+        if os.path.isdir(data_dir) == False:
+            logging.error("%s is not a directory. Please check the configuration and run scylla_io_setup again.\n", data_dir)
+            sys.exit(1)
+        st = os.statvfs(data_dir)
+        avail = st.f_bavail * st.f_frsize
+        rec = 10000000000
+        if avail < rec:
+            logging.error("Filesystem at %s has only %d bytes available; that is less than the recommended 10 GB. Please free up space and run scylla_io_setup again.\n", data_dir, avail)
+            sys.exit(1)
+        blocktune.tune_fs(data_dir, '2')
+        iotune_args += [ "--evaluation-directory", data_dir ]
 
-            if cpudata.cpuset():
-                iotune_args += [ "--cpuset", ",".join(map(str, cpudata.cpuset())) ]
-            elif cpudata.smp():
-                iotune_args += [ "--smp", str(cpudata.smp()) ]
+    if cpudata.cpuset():
+        iotune_args += [ "--cpuset", ",".join(map(str, cpudata.cpuset())) ]
+    elif cpudata.smp():
+        iotune_args += [ "--smp", str(cpudata.smp()) ]
 
-            try:
-                subprocess.check_call([bindir() + "/iotune",
-                                       "--format", "envfile",
-                                       "--options-file", etcdir() + "/scylla.d/io.conf",
-                                       "--properties-file", etcdir() + "/scylla.d/io_properties.yaml"] + iotune_args)
-            except Exception as e:
-                logging.error(e)
-                logging.error("%s did not pass validation tests, it may not be on XFS and/or has limited disk space.\n"
-                              "This is a non-supported setup, and performance is expected to be very bad.\n"
-                              "For better performance, placing your data on XFS-formatted directories is required.\n"
-                              "To override this error, enable developer mode as follow:\n"
-                              "sudo %s/scylla_dev_mode_setup --developer-mode 1", data_dirs, scriptsdir())
-                sys.exit(1)
+    try:
+        subprocess.check_call(
+            (
+                [
+                    f"{bindir()}/iotune",
+                    "--format",
+                    "envfile",
+                    "--options-file",
+                    f"{etcdir()}/scylla.d/io.conf",
+                    "--properties-file",
+                    f"{etcdir()}/scylla.d/io_properties.yaml",
+                ]
+                + iotune_args
+            )
+        )
+
+    except Exception as e:
+        logging.error(e)
+        logging.error("%s did not pass validation tests, it may not be on XFS and/or has limited disk space.\n"
+                      "This is a non-supported setup, and performance is expected to be very bad.\n"
+                      "For better performance, placing your data on XFS-formatted directories is required.\n"
+                      "To override this error, enable developer mode as follow:\n"
+                      "sudo %s/scylla_dev_mode_setup --developer-mode 1", data_dirs, scriptsdir())
+        sys.exit(1)
 
 if __name__ == "__main__":
     if not is_nonroot() and os.getuid() > 0:

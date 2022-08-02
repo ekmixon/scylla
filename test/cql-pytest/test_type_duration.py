@@ -29,10 +29,10 @@ from cassandra.util import Duration
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (p int PRIMARY KEY, d duration)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # The Cassandra documentation
 # https://cassandra.apache.org/doc/latest/cql/types.html#durations

@@ -42,26 +42,32 @@ from util import create_test_table, random_string, full_scan, full_query, multis
 # fail quickly, to avoid xfailing tests being very slow.
 def assert_index_query(table, index_name, expected_items, **kwargs):
     expected = multiset(expected_items)
-    for i in range(5):
+    for _ in range(5):
         got = multiset(full_query(table, IndexName=index_name, ConsistentRead=False, **kwargs))
         if expected == got:
             return
         elif got - expected:
             # If we got any items that weren't expected, there's no point to retry.
-            pytest.fail("assert_index_query() found unexpected items: " + str(got - expected))
+            pytest.fail(
+                f"assert_index_query() found unexpected items: {str(got - expected)}"
+            )
+
         print('assert_index_query retrying')
         time.sleep(1)
     assert multiset(expected_items) == multiset(full_query(table, IndexName=index_name, ConsistentRead=False, **kwargs))
 
 def assert_index_scan(table, index_name, expected_items, **kwargs):
     expected = multiset(expected_items)
-    for i in range(5):
+    for _ in range(5):
         got =  multiset(full_scan(table, IndexName=index_name, ConsistentRead=False, **kwargs))
         if expected == got:
             return
         elif got - expected:
             # If we got any items that weren't expected, there's no point to retry.
-            pytest.fail("assert_index_scan() found unexpected items: " + str(got - expected))
+            pytest.fail(
+                f"assert_index_scan() found unexpected items: {str(got - expected)}"
+            )
+
         print('assert_index_scan retrying')
         time.sleep(1)
     assert multiset(expected_items) == multiset(full_scan(table, IndexName=index_name, ConsistentRead=False, **kwargs))
@@ -81,7 +87,7 @@ def test_gsi_identical(dynamodb):
                 'Projection': { 'ProjectionType': 'ALL' }
             }
         ])
-    items = [{'p': random_string(), 'x': random_string()} for i in range(10)]
+    items = [{'p': random_string(), 'x': random_string()} for _ in range(10)]
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -121,7 +127,11 @@ def test_table_gsi_1(dynamodb):
     table.delete()
 
 def test_gsi_simple(test_table_gsi_1):
-    items = [{'p': random_string(), 'c': random_string(), 'x': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'c': random_string(), 'x': random_string()}
+        for _ in range(10)
+    ]
+
     with test_table_gsi_1.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -140,7 +150,10 @@ def test_gsi_simple(test_table_gsi_1):
 def test_gsi_same_key(test_table_gsi_1):
     c = random_string();
     # All these items have the same sort key 'c' but different hash key 'p'
-    items = [{'p': random_string(), 'c': c, 'x': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'c': c, 'x': random_string()} for _ in range(10)
+    ]
+
     with test_table_gsi_1.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -242,7 +255,11 @@ def test_table_gsi_1_hash_only(dynamodb):
 
 def test_gsi_key_not_in_index(test_table_gsi_1_hash_only):
     # Test with items with different 'c' values:
-    items = [{'p': random_string(), 'c': random_string(), 'x': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'c': random_string(), 'x': random_string()}
+        for _ in range(10)
+    ]
+
     with test_table_gsi_1_hash_only.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -252,7 +269,10 @@ def test_gsi_key_not_in_index(test_table_gsi_1_hash_only):
         KeyConditions={'c': {'AttributeValueList': [c], 'ComparisonOperator': 'EQ'}})
     # Test items with the same sort key 'c' but different hash key 'p'
     c = random_string();
-    items = [{'p': random_string(), 'c': c, 'x': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'c': c, 'x': random_string()} for _ in range(10)
+    ]
+
     with test_table_gsi_1_hash_only.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -285,10 +305,10 @@ def test_table_gsi_2(dynamodb):
     table.delete()
 
 def test_gsi_2(test_table_gsi_2):
-    items1 = [{'p': random_string(), 'x': random_string()} for i in range(10)]
+    items1 = [{'p': random_string(), 'x': random_string()} for _ in range(10)]
     x1 = items1[0]['x']
     x2 = random_string()
-    items2 = [{'p': random_string(), 'x': x2} for i in range(10)]
+    items2 = [{'p': random_string(), 'x': x2} for _ in range(10)]
     items = items1 + items2
     with test_table_gsi_2.batch_writer() as batch:
         for item in items:
@@ -318,12 +338,17 @@ def test_gsi_missing_attribute(test_table_gsi_2):
     # will).
     assert_index_query(test_table_gsi_2, 'hello', [{'p': p1, 'x': x1}],
         KeyConditions={'x': {'AttributeValueList': [x1], 'ComparisonOperator': 'EQ'}})
-    assert any([i['p'] == p1 for i in full_scan(test_table_gsi_2)])
+    assert any(i['p'] == p1 for i in full_scan(test_table_gsi_2))
     # Note: with eventually consistent read, we can't really be sure that
     # and item will "never" appear in the index. We do this test last,
     # so if we had a bug and such item did appear, hopefully we had enough
     # time for the bug to become visible. At least sometimes.
-    assert not any([i['p'] == p2 for i in full_scan(test_table_gsi_2, ConsistentRead=False, IndexName='hello')])
+    assert all(
+        i['p'] != p2
+        for i in full_scan(
+            test_table_gsi_2, ConsistentRead=False, IndexName='hello'
+        )
+    )
 
 # Test when a table has a GSI, if the indexed attribute has the wrong type,
 # the update operation is rejected, and is added to neither base table nor
@@ -337,7 +362,9 @@ def test_gsi_wrong_type_attribute_put(test_table_gsi_2):
     p = random_string()
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
         test_table_gsi_2.put_item(Item={'p':  p, 'x': 3})
-    assert not 'Item' in test_table_gsi_2.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_gsi_2.get_item(
+        Key={'p': p}, ConsistentRead=True
+    )
 
 def test_gsi_wrong_type_attribute_update(test_table_gsi_2):
     # An UpdateItem with wrong type for 'x' is also rejected, but naturally
@@ -390,7 +417,9 @@ def test_gsi_wrong_type_attribute_batch(test_table_gsi_2):
             for item in items:
                 batch.put_item(item)
     for p in [p1, p2, p3]:
-        assert not 'Item' in test_table_gsi_2.get_item(Key={'p': p}, ConsistentRead=True)
+        assert 'Item' not in test_table_gsi_2.get_item(
+            Key={'p': p}, ConsistentRead=True
+        )
 
 # A third scenario of GSI. Index has a hash key and a sort key, both are
 # non-key attributes from the base table. This scenario may be very
@@ -419,7 +448,11 @@ def test_table_gsi_3(dynamodb):
     table.delete()
 
 def test_gsi_3(test_table_gsi_3):
-    items = [{'p': random_string(), 'a': random_string(), 'b': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'a': random_string(), 'b': random_string()}
+        for _ in range(10)
+    ]
+
     with test_table_gsi_3.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -428,7 +461,16 @@ def test_gsi_3(test_table_gsi_3):
                        'b': {'AttributeValueList': [items[3]['b']], 'ComparisonOperator': 'EQ'}})
 
 def test_gsi_update_second_regular_base_column(test_table_gsi_3):
-    items = [{'p': random_string(), 'a': random_string(), 'b': random_string(), 'd': random_string()} for i in range(10)]
+    items = [
+        {
+            'p': random_string(),
+            'a': random_string(),
+            'b': random_string(),
+            'd': random_string(),
+        }
+        for _ in range(10)
+    ]
+
     with test_table_gsi_3.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -457,15 +499,32 @@ def test_gsi_missing_attribute_3(test_table_gsi_3):
     # an item will "never" appear in the index. We hope that if a bug exists
     # and such an item did appear, sometimes the delay here will be enough
     # for the unexpected item to become visible.
-    assert not any([i['p'] == p for i in full_scan(test_table_gsi_3, ConsistentRead=False, IndexName='hello')])
+    assert all(
+        i['p'] != p
+        for i in full_scan(
+            test_table_gsi_3, ConsistentRead=False, IndexName='hello'
+        )
+    )
+
     # Same thing for an item with a missing "b" value:
     test_table_gsi_3.put_item(Item={'p':  p, 'a': a})
     assert test_table_gsi_3.get_item(Key={'p':  p}, ConsistentRead=True)['Item'] == {'p': p, 'a': a}
-    assert not any([i['p'] == p for i in full_scan(test_table_gsi_3, ConsistentRead=False, IndexName='hello')])
+    assert all(
+        i['p'] != p
+        for i in full_scan(
+            test_table_gsi_3, ConsistentRead=False, IndexName='hello'
+        )
+    )
+
     # And for an item missing both:
     test_table_gsi_3.put_item(Item={'p':  p})
     assert test_table_gsi_3.get_item(Key={'p':  p}, ConsistentRead=True)['Item'] == {'p': p}
-    assert not any([i['p'] == p for i in full_scan(test_table_gsi_3, ConsistentRead=False, IndexName='hello')])
+    assert all(
+        i['p'] != p
+        for i in full_scan(
+            test_table_gsi_3, ConsistentRead=False, IndexName='hello'
+        )
+    )
 
 # A fourth scenario of GSI. Two GSIs on a single base table.
 @pytest.fixture(scope="module")
@@ -496,7 +555,11 @@ def test_table_gsi_4(dynamodb):
 
 # Test that a base table with two GSIs updates both as expected.
 def test_gsi_4(test_table_gsi_4):
-    items = [{'p': random_string(), 'a': random_string(), 'b': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'a': random_string(), 'b': random_string()}
+        for _ in range(10)
+    ]
+
     with test_table_gsi_4.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -537,10 +600,14 @@ def test_table_gsi_5(dynamodb):
     table.delete()
 
 def test_gsi_5(test_table_gsi_5):
-    items1 = [{'p': random_string(), 'c': random_string(), 'x': random_string()} for i in range(10)]
+    items1 = [
+        {'p': random_string(), 'c': random_string(), 'x': random_string()}
+        for _ in range(10)
+    ]
+
     p1, x1 = items1[0]['p'], items1[0]['x']
     p2, x2 = random_string(), random_string()
-    items2 = [{'p': p2, 'c': random_string(), 'x': x2} for i in range(10)]
+    items2 = [{'p': p2, 'c': random_string(), 'x': x2} for _ in range(10)]
     items = items1 + items2
     with test_table_gsi_5.batch_writer() as batch:
         for item in items:
@@ -620,7 +687,11 @@ def test_gsi_projection_keys_only(dynamodb):
                 'Projection': { 'ProjectionType': 'KEYS_ONLY' }
             }
         ])
-    items = [{'p': random_string(), 'x': random_string(), 'y': random_string()} for i in range(10)]
+    items = [
+        {'p': random_string(), 'x': random_string(), 'y': random_string()}
+        for _ in range(10)
+    ]
+
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -650,8 +721,22 @@ def test_gsi_projection_include(dynamodb):
             }
         ])
     # Some items have the projected attributes a,b and some don't:
-    items = [{'p': random_string(), 'x': random_string(), 'a': random_string(), 'b': random_string(), 'y': random_string()} for i in range(10)]
-    items = items + [{'p': random_string(), 'x': random_string(), 'y': random_string()} for i in range(10)]
+    items = [
+        {
+            'p': random_string(),
+            'x': random_string(),
+            'a': random_string(),
+            'b': random_string(),
+            'y': random_string(),
+        }
+        for _ in range(10)
+    ]
+
+    items += [
+        {'p': random_string(), 'x': random_string(), 'y': random_string()}
+        for _ in range(10)
+    ]
+
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -708,7 +793,7 @@ def wait_for_gsi(table, gsi_name):
             print(f'{i} Index {gsi_name} status still {index_status}')
             continue
         # When the index is ACTIVE, this must be after backfilling completed
-        assert not 'Backfilling' in index_desc[0]
+        assert 'Backfilling' not in index_desc[0]
         print('wait_for_gsi took %d seconds' % (time.time() - start_time))
         return
     raise AssertionError("wait_for_gsi did not complete")
@@ -725,8 +810,11 @@ def wait_for_gsi_gone(table, gsi_name):
             print(f'{i} Table {table.name} status still {table_status}')
             continue
         if 'GlobalSecondaryIndexes' in desc['Table']:
-            index_desc = [x for x in desc['Table']['GlobalSecondaryIndexes'] if x['IndexName'] == gsi_name]
-            if len(index_desc) != 0:
+            if index_desc := [
+                x
+                for x in desc['Table']['GlobalSecondaryIndexes']
+                if x['IndexName'] == gsi_name
+            ]:
                 index_status = index_desc[0]['IndexStatus']
                 print(f'{i} Index {gsi_name} status still {index_status}')
                 continue
@@ -753,8 +841,12 @@ def test_gsi_backfill(dynamodb):
     table = create_test_table(dynamodb,
         KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' } ],
         AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' } ])
-    items1 = [{'p': random_string(), 'x': random_string(), 'y': random_string()} for i in range(10)]
-    items2 = [{'p': random_string(), 'y': random_string()} for i in range(10)]
+    items1 = [
+        {'p': random_string(), 'x': random_string(), 'y': random_string()}
+        for _ in range(10)
+    ]
+
+    items2 = [{'p': random_string(), 'y': random_string()} for _ in range(10)]
     items3 = [{'p': random_string(), 'x': i} for i in range(10)]
     items = items1 + items2 + items3
     with table.batch_writer() as batch:
@@ -813,7 +905,7 @@ def test_gsi_delete(dynamodb):
                 'Projection': { 'ProjectionType': 'ALL' }
             }
         ])
-    items = [{'p': random_string(), 'x': random_string()} for i in range(10)]
+    items = [{'p': random_string(), 'x': random_string()} for _ in range(10)]
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -916,7 +1008,7 @@ def test_gsi_list_tables(dynamodb, test_table_gsi_random_name):
     # Check that the random "index_name" isn't a substring of any table name:
     tables = list_tables(dynamodb)
     for name in tables:
-        assert not index_name in name
+        assert index_name not in name
     # But of course, the table's name should be in the list:
     assert table.name in tables
 
@@ -990,7 +1082,16 @@ def test_gsi_backfill_empty_string(dynamodb):
 # projection of just a subset of the attributes.
 @pytest.mark.xfail(reason="Select not supported yet. Issue #5058")
 def test_gsi_query_select_1(test_table_gsi_1):
-    items = [{'p': random_string(), 'c': random_string(), 'x': random_string(), 'y': random_string()} for i in range(10)]
+    items = [
+        {
+            'p': random_string(),
+            'c': random_string(),
+            'x': random_string(),
+            'y': random_string(),
+        }
+        for _ in range(10)
+    ]
+
     with test_table_gsi_1.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -1016,27 +1117,40 @@ def test_gsi_query_select_1(test_table_gsi_1):
         Select='SPECIFIC_ATTRIBUTES',
         AttributesToGet=['y'],
         KeyConditions={'c': {'AttributeValueList': [c], 'ComparisonOperator': 'EQ'}})
-    assert not 'Items' in test_table_gsi_1.query(ConsistentRead=False,
+    assert 'Items' not in test_table_gsi_1.query(
+        ConsistentRead=False,
         IndexName='hello',
         Select='COUNT',
-        KeyConditions={'c': {'AttributeValueList': [c], 'ComparisonOperator': 'EQ'}})
+        KeyConditions={
+            'c': {'AttributeValueList': [c], 'ComparisonOperator': 'EQ'}
+        },
+    )
 
 @pytest.mark.xfail(reason="Projection and Select not supported yet. Issue #5036, #5058")
 def test_gsi_query_select_2(dynamodb):
     with new_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' } ],
-        AttributeDefinitions=[
-                    { 'AttributeName': 'p', 'AttributeType': 'S' },
-                    { 'AttributeName': 'x', 'AttributeType': 'S' },
-        ],
-        GlobalSecondaryIndexes=[
-            {   'IndexName': 'hello',
-                'KeySchema': [ { 'AttributeName': 'x', 'KeyType': 'HASH' } ],
-                'Projection': { 'ProjectionType': 'INCLUDE',
-                                'NonKeyAttributes': ['a'] }
+            KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' } ],
+            AttributeDefinitions=[
+                        { 'AttributeName': 'p', 'AttributeType': 'S' },
+                        { 'AttributeName': 'x', 'AttributeType': 'S' },
+            ],
+            GlobalSecondaryIndexes=[
+                {   'IndexName': 'hello',
+                    'KeySchema': [ { 'AttributeName': 'x', 'KeyType': 'HASH' } ],
+                    'Projection': { 'ProjectionType': 'INCLUDE',
+                                    'NonKeyAttributes': ['a'] }
+                }
+            ]) as table:
+        items = [
+            {
+                'p': random_string(),
+                'x': random_string(),
+                'a': random_string(),
+                'b': random_string(),
             }
-        ]) as table:
-        items = [{'p': random_string(), 'x': random_string(), 'a': random_string(), 'b': random_string()} for i in range(10)]
+            for _ in range(10)
+        ]
+
         with table.batch_writer() as batch:
             for item in items:
                 batch.put_item(item)
@@ -1066,7 +1180,11 @@ def test_gsi_query_select_2(dynamodb):
             AttributesToGet=['a'],
             KeyConditions={'x': {'AttributeValueList': [x], 'ComparisonOperator': 'EQ'}})
         # Select=COUNT is also allowed, and doesn't return item content
-        assert not 'Items' in table.query(ConsistentRead=False,
+        assert 'Items' not in table.query(
+            ConsistentRead=False,
             IndexName='hello',
             Select='COUNT',
-            KeyConditions={'x': {'AttributeValueList': [x], 'ComparisonOperator': 'EQ'}})
+            KeyConditions={
+                'x': {'AttributeValueList': [x], 'ComparisonOperator': 'EQ'}
+            },
+        )

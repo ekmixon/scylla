@@ -225,7 +225,7 @@ class GitArchiver(object):
                 patterns = exclude_patterns[key]
                 for p in patterns:
                     if fnmatch(file_name, p) or fnmatch(repo_file_path, p):
-                        self.LOG.debug("Exclude pattern matched {}: {}".format(p, repo_file_path))
+                        self.LOG.debug(f"Exclude pattern matched {p}: {repo_file_path}")
                         is_excluded = True
 
             if not len(components):
@@ -288,8 +288,7 @@ class GitArchiver(object):
         for submodule_path in self.read_shell("git submodule --quiet foreach 'pwd -P'", repo_abspath).splitlines():
             # Shell command returns absolute paths to submodules.
             submodule_path = path.relpath(submodule_path, self.main_repo_abspath)
-            for file_path in self.walk_git_files(submodule_path):
-                yield file_path
+            yield from self.walk_git_files(submodule_path)
 
     @staticmethod
     def get_path_components(repo_abspath, abspath):
@@ -322,11 +321,14 @@ class GitArchiver(object):
             raise ValueError("abspath MUST be absoulte path.")
 
         if not path.commonprefix([repo_abspath, abspath]):
-            raise ValueError("abspath (\"{}\") MUST have common prefix with repo_abspath (\"{}\")".format(abspath, repo_abspath))
+            raise ValueError(
+                f'abspath (\"{abspath}\") MUST have common prefix with repo_abspath (\"{repo_abspath}\")'
+            )
+
 
         components = []
 
-        while not abspath == repo_abspath:
+        while abspath != repo_abspath:
             abspath, tail = path.split(abspath)
 
             if tail:
@@ -422,8 +424,11 @@ class GitArchiver(object):
 if __name__ == '__main__':
     from optparse import OptionParser
 
-    parser = OptionParser(usage="usage: %prog [-v] [--prefix PREFIX] [--no-exclude] [--force-submodules] [--extra EXTRA1 [EXTRA2]] [--dry-run] OUTPUT_FILE",
-                          version="%prog {}".format(__version__))
+    parser = OptionParser(
+        usage="usage: %prog [-v] [--prefix PREFIX] [--no-exclude] [--force-submodules] [--extra EXTRA1 [EXTRA2]] [--dry-run] OUTPUT_FILE",
+        version=f"%prog {__version__}",
+    )
+
 
     parser.add_option('--prefix',
                       type='string',
@@ -489,6 +494,6 @@ if __name__ == '__main__':
                                options.extra)
         archiver.create(output_file_path, options.dry_run)
     except Exception as e:
-        parser.exit(2, "{}\n".format(e))
+        parser.exit(2, f"{e}\n")
 
     sys.exit(0)

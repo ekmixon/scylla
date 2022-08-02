@@ -404,11 +404,19 @@ def test_update_expression_cannot_modify_key(test_table):
         test_table.update_item(Key={'p': p, 'c': c},
             UpdateExpression='ADD c :val1', ExpressionAttributeValues={':val1': 4})
     with pytest.raises(ClientError, match='ValidationException.*key'):
-        test_table.update_item(Key={'p': p, 'c': c},
-            UpdateExpression='DELETE p :val1', ExpressionAttributeValues={':val1': set(['cat', 'mouse'])})
+        test_table.update_item(
+            Key={'p': p, 'c': c},
+            UpdateExpression='DELETE p :val1',
+            ExpressionAttributeValues={':val1': {'cat', 'mouse'}},
+        )
+
     with pytest.raises(ClientError, match='ValidationException.*key'):
-        test_table.update_item(Key={'p': p, 'c': c},
-            UpdateExpression='DELETE c :val1', ExpressionAttributeValues={':val1': set(['cat', 'mouse'])})
+        test_table.update_item(
+            Key={'p': p, 'c': c},
+            UpdateExpression='DELETE c :val1',
+            ExpressionAttributeValues={':val1': {'cat', 'mouse'}},
+        )
+
     # As sanity check, verify we *can* modify a non-key column
     test_table.update_item(Key={'p': p, 'c': c}, UpdateExpression='SET a = :val1', ExpressionAttributeValues={':val1': 4})
     assert test_table.get_item(Key={'p': p, 'c': c}, ConsistentRead=True)['Item'] == {'p': p, 'c': c, 'a': 4}
@@ -728,21 +736,36 @@ def test_update_expression_add_numbers_new(test_table_s):
 # Test "ADD" operation for sets
 def test_update_expression_add_sets(test_table_s):
     p = random_string()
-    test_table_s.put_item(Item={'p': p, 'a': set(['dog', 'cat', 'mouse']), 'b': 'hi'})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.put_item(Item={'p': p, 'a': {'dog', 'cat', 'mouse'}, 'b': 'hi'})
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD a :val1',
-        ExpressionAttributeValues={':val1': set(['pig'])})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['dog', 'cat', 'mouse', 'pig'])
+        ExpressionAttributeValues={':val1': {'pig'}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'dog', 'cat', 'mouse', 'pig'}
+
 
     # TODO: right now this test won't detect duplicated values in the returned result,
     # because boto3 parses a set out of the returned JSON anyway. This check should leverage
     # lower level API (if exists) to ensure that the JSON contains no duplicates
     # in the set representation. It has been verified manually.
-    test_table_s.put_item(Item={'p': p, 'a': set(['beaver', 'lynx', 'coati']), 'b': 'hi'})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.put_item(
+        Item={'p': p, 'a': {'beaver', 'lynx', 'coati'}, 'b': 'hi'}
+    )
+
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD a :val1',
-        ExpressionAttributeValues={':val1': set(['coati', 'beaver', 'badger'])})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['beaver', 'badger', 'lynx', 'coati'])
+        ExpressionAttributeValues={':val1': {'coati', 'beaver', 'badger'}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'beaver', 'badger', 'lynx', 'coati'}
+
 
     # The value to be added needs to be a set of the same type - it can't
     # be a single element or anything else. If the value has the wrong type,
@@ -760,16 +783,27 @@ def test_update_expression_add_sets_new(test_table_s):
     # Test that "ADD" can create a new set attribute:
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hello'})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD b :val1',
-        ExpressionAttributeValues={':val1': set(['dog'])})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['b'] == set(['dog'])
+        ExpressionAttributeValues={':val1': {'dog'}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'b'
+    ] == {'dog'}
+
     # Test that "ADD" can create an entirely new item:
     p = random_string()
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD b :val1',
-        ExpressionAttributeValues={':val1': set(['cat'])})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['b'] == set(['cat'])
+        ExpressionAttributeValues={':val1': {'cat'}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'b'
+    ] == {'cat'}
 
 # Although AttributeUpdate's ADD operation works on lists (despite being
 # documented only for sets; see test_item.py::test_update_item_add), the
@@ -787,7 +821,7 @@ def test_update_expression_add_lists(test_table_s):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='ADD a :val1',
             ExpressionAttributeValues={':val1': [3, 4]})
-    test_table_s.put_item(Item={'p': p, 'a': set([1, 2])})
+    test_table_s.put_item(Item={'p': p, 'a': {1, 2}})
     with pytest.raises(ClientError, match='ValidationException.*operand'):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='ADD a :val1',
@@ -796,35 +830,55 @@ def test_update_expression_add_lists(test_table_s):
     # those different types can't be added.
     with pytest.raises(ClientError, match='ValidationException.*operand'):
         test_table_s.put_item(Item={'p': p, 'a': [1, 2]})
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             UpdateExpression='ADD a :val1',
-            ExpressionAttributeValues={':val1': set([3, 4])})
+            ExpressionAttributeValues={':val1': {3, 4}},
+        )
 
 # Test "DELETE" operation for sets
 def test_update_expression_delete_sets(test_table_s):
     p = random_string()
-    test_table_s.put_item(Item={'p': p, 'a': set(['dog', 'cat', 'mouse']), 'b': 'hi'})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.put_item(Item={'p': p, 'a': {'dog', 'cat', 'mouse'}, 'b': 'hi'})
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='DELETE a :val1',
-        ExpressionAttributeValues={':val1': set(['cat', 'mouse'])})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['dog'])
+        ExpressionAttributeValues={':val1': {'cat', 'mouse'}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'dog'}
+
     # Deleting an element not present in the set is not an error - it just
     # does nothing
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='DELETE a :val1',
-        ExpressionAttributeValues={':val1': set(['pig'])})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['dog'])
+        ExpressionAttributeValues={':val1': {'pig'}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'dog'}
+
     # Deleting all the elements cannot leave an empty set (which isn't
     # supported). Rather, it deletes the attribute altogether:
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='DELETE a :val1',
-        ExpressionAttributeValues={':val1': set(['dog'])})
+        ExpressionAttributeValues={':val1': {'dog'}},
+    )
+
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'b': 'hi'}
     # Deleting elements from a non-existent attribute is allowed, and
     # simply does nothing:
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='DELETE a :val1',
-        ExpressionAttributeValues={':val1': set(['dog'])})
+        ExpressionAttributeValues={':val1': {'dog'}},
+    )
+
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'b': 'hi'}
     # An empty set parameter is not allowed
     with pytest.raises(ClientError, match='ValidationException.*empty'):
@@ -835,7 +889,7 @@ def test_update_expression_delete_sets(test_table_s):
     # be a single element or anything else. If the value has the wrong type,
     # we get an error like "Invalid UpdateExpression: Incorrect operand type
     # for operator or function; operator: DELETE, operand type: STRING".
-    test_table_s.put_item(Item={'p': p, 'a': set(['dog', 'cat', 'mouse']), 'b': 'hi'})
+    test_table_s.put_item(Item={'p': p, 'a': {'dog', 'cat', 'mouse'}, 'b': 'hi'})
     with pytest.raises(ClientError, match='ValidationException.*type'):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='DELETE a :val1',
@@ -1080,7 +1134,7 @@ def test_update_expression_empty_attribute(test_table_s):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='SET a = :v',
             ExpressionAttributeValues={':v': set()})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     # But empty lists, maps, strings and binary blobs *are* allowed:
     test_table_s.update_item(Key={'p': p},
         UpdateExpression='SET d = :v1, e = :v2, f = :v3, g = :v4',

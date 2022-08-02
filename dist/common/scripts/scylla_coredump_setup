@@ -40,17 +40,16 @@ if __name__ == '__main__':
     parser.add_argument('--compress', action='store_true', default=False,
                         help='enable compress on systemd-coredump')
     args = parser.parse_args()
-
 # Gentoo may uses OpenRC
     if is_gentoo():
         run('sysctl -p /etc/sysctl.d/99-scylla-coredump.conf', shell=True, check=True)
-# Other distributions can use systemd-coredump, so setup it
     else:
-        if is_debian_variant() or is_suse_variant():
-            if not shutil.which('coredumpctl'):
-                pkg_install('systemd-coredump')
-                if is_suse_variant():
-                    systemd_unit('systemd-coredump.socket').restart()
+        if (is_debian_variant() or is_suse_variant()) and not shutil.which(
+            'coredumpctl'
+        ):
+            pkg_install('systemd-coredump')
+            if is_suse_variant():
+                systemd_unit('systemd-coredump.socket').restart()
         # Some older distribution does not have this unit
         if systemd_unit.available('systemd-coredump@.service'):
             dropin = '''
@@ -113,7 +112,14 @@ WantedBy=multi-user.target
         # need to wait for systemd-coredump to complete collecting coredump
         time.sleep(3)
         try:
-            coreinfo = run('coredumpctl --no-pager --no-legend info {}'.format(pid), shell=True, check=True, capture_output=True, encoding='utf-8').stdout.strip()
+            coreinfo = run(
+                f'coredumpctl --no-pager --no-legend info {pid}',
+                shell=True,
+                check=True,
+                capture_output=True,
+                encoding='utf-8',
+            ).stdout.strip()
+
         except subprocess.CalledProcessError:
             print('Does not able to detect coredump, failed to configure systemd-coredump.')
             sys.exit(1)
@@ -139,19 +145,14 @@ WantedBy=multi-user.target
         # reference: https://github.com/systemd/systemd/commit/47f50642075a7a215c9f7b600599cbfee81a2913
 
         corefail = False
-        res = re.findall(r'Storage: (.*)$', coreinfo, flags=re.MULTILINE)
-        # v232 or later
-        if res:
+        if res := re.findall(r'Storage: (.*)$', coreinfo, flags=re.MULTILINE):
             corepath = res[0]
             if corepath == 'none' or corepath == 'journal' or corepath.endswith('(inaccessible)'):
                 corefail = True
-        # before v232
+        elif res := re.findall(r'Coredump: (.*)$', coreinfo, flags=re.MULTILINE):
+            corepath = res[0]
         else:
-            res = re.findall(r'Coredump: (.*)$', coreinfo, flags=re.MULTILINE)
-            if res:
-                corepath = res[0]
-            else:
-                corefail = True
+            corefail = True
 
         if not corefail:
             try:

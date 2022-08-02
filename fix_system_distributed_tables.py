@@ -113,34 +113,46 @@ def validate_and_fix(args):
         cluster_meta = session.cluster.metadata
         for ks, tables_defs in ks_defs.items():
             if ks not in cluster_meta.keyspaces:
-                print("keyspace {} doesn't exist - skipping".format(ks))
+                print(f"keyspace {ks} doesn't exist - skipping")
                 continue
 
             ks_meta = cluster_meta.keyspaces[ks]
             for table_name, table_cols in tables_defs.items():
 
                 if table_name not in ks_meta.tables:
-                    print("{}.{} doesn't exist - skipping".format(ks, table_name))
+                    print(f"{ks}.{table_name} doesn't exist - skipping")
                     continue
 
-                print("Adjusting {}.{}".format(ks, table_name))
+                print(f"Adjusting {ks}.{table_name}")
 
                 table_meta = ks_meta.tables[table_name]
                 for column_name, column_type in table_cols.items():
                     if column_name in table_meta.columns:
                         column_meta = table_meta.columns[column_name]
                         if column_meta.cql_type != column_type:
-                            print("ERROR: {}.{}::{} column has an unexpected column type: expected '{}' found '{}'".format(ks, table_name, column_name, column_type, column_meta.cql_type))
+                            print(
+                                f"ERROR: {ks}.{table_name}::{column_name} column has an unexpected column type: expected '{column_type}' found '{column_meta.cql_type}'"
+                            )
+
                             res = False
                     else:
                         try:
-                            session.execute("ALTER TABLE {}.{} ADD {} {}".format(ks, table_name, column_name, column_type))
-                            print("{}.{}: added column '{}' of the type '{}'".format(ks, table_name, column_name, column_type))
+                            session.execute(
+                                f"ALTER TABLE {ks}.{table_name} ADD {column_name} {column_type}"
+                            )
+
+                            print(
+                                f"{ks}.{table_name}: added column '{column_name}' of the type '{column_type}'"
+                            )
+
                         except Exception:
-                            print("ERROR: {}.{}: failed to add column '{}' with type '{}': {}".format(ks, table_name, column_name, column_type, sys.exc_info()))
+                            print(
+                                f"ERROR: {ks}.{table_name}: failed to add column '{column_name}' with type '{column_type}': {sys.exc_info()}"
+                            )
+
                             res = False
     except Exception:
-        print("ERROR: {}".format(sys.exc_info()))
+        print(f"ERROR: {sys.exc_info()}")
         res = False
 
     return res
@@ -155,8 +167,7 @@ if __name__ == '__main__':
     argp.add_argument('--port', default=9042, help='Port to connect to.', type=int)
 
     args = argp.parse_args()
-    res = validate_and_fix(args)
-    if res:
+    if res := validate_and_fix(args):
         sys.exit(0)
     else:
         sys.exit(1)

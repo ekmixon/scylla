@@ -42,18 +42,15 @@ def main():
                         help='path to scylla.yaml')
     args = parser.parse_args()
     cfg = parse_scylla_dirs_with_default(conf=args.config)
-    mountpoints = set()
-    for d in cfg['data_file_directories']:
-        mountpoints.add(find_mount_point(d))
-
+    mountpoints = {find_mount_point(d) for d in cfg['data_file_directories']}
     mountpoints.add(find_mount_point(cfg['commitlog_directory']))
     # workaround of #2649
     subprocess.call(["/opt/scylladb/scripts/scylla-blocktune", "--set-nomerges", "1"])
     for d in mountpoints:
-        print("Running fstrim on {} ...".format(d))
+        print(f"Running fstrim on {d} ...")
         res = subprocess.call(["fstrim", d])
         if res != 0:
-            print("{} doesn't support TRIM.".format(d))
+            print(f"{d} doesn't support TRIM.")
     subprocess.call(["/opt/scylladb/scripts/scylla-blocktune", "--set-nomerges", "2"])
 
 if __name__ == "__main__":

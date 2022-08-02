@@ -35,9 +35,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.developer_mode == 0:
-        with open(etcdir()+'/scylla.d/dev-mode.conf', 'w') as f:
+        with open(f'{etcdir()}/scylla.d/dev-mode.conf', 'w') as f:
             f.close()
     else:
-        cfg = sysconfig_parser(etcdir()+'/scylla.d/dev-mode.conf')
+        cfg = sysconfig_parser(f'{etcdir()}/scylla.d/dev-mode.conf')
         cfg.set('DEV_MODE', '--developer-mode=1')
         cfg.commit()

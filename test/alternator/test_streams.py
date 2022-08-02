@@ -45,7 +45,7 @@ def disable_stream(dynamodbstreams, table):
                 disabled = False
                 break
         if disabled:
-            print('disabled stream on {}'.format(table.name))
+            print(f'disabled stream on {table.name}')
             return
         time.sleep(0.5)
     pytest.fail("timed out")
@@ -94,10 +94,13 @@ def wait_for_active_stream(dynamodbstreams, table, timeout=60):
         streams = dynamodbstreams.list_streams(TableName=table.name)
         for stream in streams['Streams']:
             arn = stream['StreamArn']
-            if arn == None:
+            if arn is None:
                 continue
             desc = dynamodbstreams.describe_stream(StreamArn=arn)['StreamDescription']
-            if not 'StreamStatus' in desc or desc.get('StreamStatus') == 'ENABLED':
+            if (
+                'StreamStatus' not in desc
+                or desc.get('StreamStatus') == 'ENABLED'
+            ):
                 return (arn, stream['StreamLabel']);
         # real dynamo takes some time until a stream is usable
         print("Stream not available. Sleep 5s...")
@@ -146,7 +149,7 @@ def test_list_streams_paged(dynamodb, dynamodbstreams):
     # There is no reason to run this test for all stream types - we have
     # other tests for creating tables with all stream types, and for using
     # them. This one is only about list_streams.
-    for type in stream_types[0:1]:
+    for type in stream_types[:1]:
         with create_stream_test_table(dynamodb, StreamViewType=type) as table1:
             with create_stream_test_table(dynamodb, StreamViewType=type) as table2:
                 wait_for_active_stream(dynamodbstreams, table1)
@@ -356,11 +359,13 @@ def test_get_records(dynamodb, dynamodbstreams):
                     iter = dynamodbstreams.get_shard_iterator(StreamArn=arn, ShardId=shard_id, ShardIteratorType='AT_SEQUENCE_NUMBER',SequenceNumber=start)['ShardIterator']
                     iterators.append(iter)
 
-                last_shard = desc["StreamDescription"].get("LastEvaluatedShardId")
-                if not last_shard:
-                    break
+                if last_shard := desc["StreamDescription"].get(
+                    "LastEvaluatedShardId"
+                ):
+                    desc = dynamodbstreams.describe_stream(StreamArn=arn, ExclusiveStartShardId=last_shard)
 
-                desc = dynamodbstreams.describe_stream(StreamArn=arn, ExclusiveStartShardId=last_shard)
+                else:
+                    break
 
             next_iterators = []
             while iterators:
@@ -369,15 +374,13 @@ def test_get_records(dynamodb, dynamodbstreams):
                 if 'NextShardIterator' in response:
                     next_iterators.append(response['NextShardIterator'])
 
-                records = response.get('Records')
-                # print("Query {} -> {}".format(iter, records))
-                if records:
+                if records := response.get('Records'):
                     for record in records:
                         # print("Record: {}".format(record))
                         type = record['eventName']
                         dynamodb = record['dynamodb']
                         keys = dynamodb['Keys']
-                        
+
                         assert keys.get('p')
                         assert keys.get('c')
                         assert keys['p'].get('S')
@@ -385,7 +388,7 @@ def test_get_records(dynamodb, dynamodbstreams):
                         assert keys['c'].get('S')
                         assert keys['c']['S'] == c
 
-                        if type == 'MODIFY' or type == 'INSERT':
+                        if type in ['MODIFY', 'INSERT']:
                             assert dynamodb.get('NewImage')
                             newimage = dynamodb['NewImage'];
                             assert newimage.get('a1')
@@ -497,7 +500,7 @@ def list_shards(dynamodbstreams, arn):
         assert len(response['Shards']) <= limit
         shards.extend([x['ShardId'] for x in response['Shards']])
 
-    print('Number of shards in stream: {}'.format(len(shards)))
+    print(f'Number of shards in stream: {len(shards)}')
     assert len(set(shards)) == len(shards)
     # 7409 - kinesis required shards to be in lexical order.
     # verify.
@@ -514,21 +517,28 @@ def list_shards(dynamodbstreams, arn):
 # Utility function for getting shard iterators starting at "LATEST" for
 # all the shards of the given stream arn.
 def latest_iterators(dynamodbstreams, arn):
-    iterators = []
-    for shard_id in list_shards(dynamodbstreams, arn):
-        iterators.append(dynamodbstreams.get_shard_iterator(StreamArn=arn,
-            ShardId=shard_id, ShardIteratorType='LATEST')['ShardIterator'])
+    iterators = [
+        dynamodbstreams.get_shard_iterator(
+            StreamArn=arn, ShardId=shard_id, ShardIteratorType='LATEST'
+        )['ShardIterator']
+        for shard_id in list_shards(dynamodbstreams, arn)
+    ]
+
     assert len(set(iterators)) == len(iterators)
     return iterators
 
 # Similar to latest_iterators(), just also returns the shard id which produced
 # each iterator.
 def shards_and_latest_iterators(dynamodbstreams, arn):
-    shards_and_iterators = []
-    for shard_id in list_shards(dynamodbstreams, arn):
-        shards_and_iterators.append((shard_id, dynamodbstreams.get_shard_iterator(StreamArn=arn,
-            ShardId=shard_id, ShardIteratorType='LATEST')['ShardIterator']))
-    return shards_and_iterators
+    return [
+        (
+            shard_id,
+            dynamodbstreams.get_shard_iterator(
+                StreamArn=arn, ShardId=shard_id, ShardIteratorType='LATEST'
+            )['ShardIterator'],
+        )
+        for shard_id in list_shards(dynamodbstreams, arn)
+    ]
 
 # Utility function for fetching more content from the stream (given its
 # array of iterators) into an "output" array. Call repeatedly to get more
@@ -571,7 +581,7 @@ def compare_events(expected_events, output, mode):
         # key. We only lose a bit of testing power we didn't plan to test anyway
         # (that events for different items in the same partition are ordered).
         key = freeze(expected_key)
-        if not key in expected_events_map:
+        if key not in expected_events_map:
             expected_events_map[key] = []
         expected_events_map[key].append(event)
     # Iterate over the events in output. An event for a certain key needs to
@@ -611,42 +621,36 @@ def compare_events(expected_events, output, mode):
         # Alternator doesn't set the SizeBytes member. Issue #6931.
         #assert 'SizeBytes' in record
         if mode == 'KEYS_ONLY':
-            assert not 'NewImage' in record
-            assert not 'OldImage' in record
+            assert 'NewImage' not in record
+            assert 'OldImage' not in record
         elif mode == 'NEW_IMAGE':
-            assert not 'OldImage' in record
-            if expected_new_image == None:
-                assert not 'NewImage' in record
+            assert 'OldImage' not in record
+            if expected_new_image is None:
+                assert 'NewImage' not in record
             else:
                 new_image = {x:deserializer.deserialize(y) for (x,y) in record['NewImage'].items()}
                 assert expected_new_image == new_image
         elif mode == 'OLD_IMAGE':
-            assert not 'NewImage' in record
-            if expected_old_image == None:
-                assert not 'OldImage' in record
-                pass
+            assert 'NewImage' not in record
+            if expected_old_image is None:
+                assert 'OldImage' not in record
             else:
                 old_image = {x:deserializer.deserialize(y) for (x,y) in record['OldImage'].items()}
                 assert expected_old_image == old_image
         elif mode == 'NEW_AND_OLD_IMAGES':
-            if expected_new_image == None:
-                assert not 'NewImage' in record
+            if expected_new_image is None:
+                assert 'NewImage' not in record
             else:
                 new_image = {x:deserializer.deserialize(y) for (x,y) in record['NewImage'].items()}
                 assert expected_new_image == new_image
-            if expected_old_image == None:
-                assert not 'OldImage' in record
+            if expected_old_image is None:
+                assert 'OldImage' not in record
             else:
                 old_image = {x:deserializer.deserialize(y) for (x,y) in record['OldImage'].items()}
                 assert expected_old_image == old_image
         else:
             pytest.fail('cannot happen')
-    # After the above loop, expected_events_map should remain empty arrays.
-    # If it isn't, one of the expected events did not yet happen. Return False.
-    for entry in expected_events_map.values():
-        if len(entry) > 0:
-            return False
-    return True
+    return all(len(entry) <= 0 for entry in expected_events_map.values())
 
 # Convenience funtion used to implement several tests below. It runs a given
 # function "updatefunc" which is supposed to do some updates to the table
@@ -669,13 +673,16 @@ def do_test(test_table_ss_stream, dynamodbstreams, updatefunc, mode, p = random_
     output = []
     while time.time() < timeout:
         iterators = fetch_more(dynamodbstreams, iterators, output)
-        print("after fetch_more number expected_events={}, output={}".format(len(expected_events), len(output)))
+        print(
+            f"after fetch_more number expected_events={len(expected_events)}, output={len(output)}"
+        )
+
         if compare_events(expected_events, output, mode):
             # success!
             return
         time.sleep(0.5)
     # If we're still here, the last compare_events returned false.
-    pytest.fail('missing events in output: {}'.format(output))
+    pytest.fail(f'missing events in output: {output}')
 
 # Test a single PutItem of a new item. Should result in a single INSERT
 # event. Currently fails because in Alternator, PutItem - which generates a
@@ -1184,10 +1191,9 @@ def test_streams_starting_sequence_number(test_table_ss_keys_only, dynamodbstrea
 # The following tests focus on mulitple operations on the *same* item. Those
 # should appear in the stream in the correct order.
 def do_updates_1(table, p, c):
-    events = []
     # a first put_item appears as an INSERT event. Note also empty old_image.
     table.put_item(Item={'p': p, 'c': c, 'x': 2})
-    events.append(['INSERT', {'p': p, 'c': c}, None, {'p': p, 'c': c, 'x': 2}])
+    events = [['INSERT', {'p': p, 'c': c}, None, {'p': p, 'c': c, 'x': 2}]]
     # a second put_item of the *same* key and same value, doesn't appear in the log at all!
     table.put_item(Item={'p': p, 'c': c, 'x': 2})
     # a second put_item of the *same* key and different value, appears as a MODIFY event
@@ -1277,7 +1283,7 @@ def test_table_stream_with_result(dynamodb, dynamodbstreams):
 # not allowed to update the same table again or delete it.
 def wait_for_status_active(table):
     start_time = time.time()
-    for i in range(60):
+    for _ in range(60):
         desc = table.meta.client.describe_table(TableName=table.name)
         if desc['Table']['TableStatus'] == 'ACTIVE':
             return
@@ -1393,7 +1399,7 @@ def test_streams_closed_read(test_table_ss_keys_only, dynamodbstreams):
                 if 'NextShardIterator' in response:
                     response = dynamodbstreams.get_records(ShardIterator=response['NextShardIterator'])
                     assert len(response['Records']) == 0
-                    assert not 'NextShardIterator' in response
+                    assert 'NextShardIterator' not in response
                 # Until now we verified that we can read the closed shard
                 # using an old iterator. Let's test now that the closed
                 # shard id is also still valid, and a new iterator can be
@@ -1462,7 +1468,7 @@ def test_streams_disabled_stream(test_table_ss_keys_only, dynamodbstreams):
         assert response['StreamViewType'] == 'KEYS_ONLY'
         assert response['TableName'] == table.name
         shards_info.extend(response['Shards'])
-    print('Number of shards in stream: {}'.format(len(shards_info)))
+    print(f'Number of shards in stream: {len(shards_info)}')
     for shard in shards_info:
         assert 'EndingSequenceNumber' in shard['SequenceNumberRange']
         assert shard['SequenceNumberRange']['EndingSequenceNumber'].isdecimal()
@@ -1471,9 +1477,14 @@ def test_streams_disabled_stream(test_table_ss_keys_only, dynamodbstreams):
     # the old data they still have (this data should be saved for 24 hours
     # after the stream was disabled)
     iterators = []
-    for shard in shards_info:
-        iterators.append(dynamodbstreams.get_shard_iterator(StreamArn=arn,
-            ShardId=shard['ShardId'], ShardIteratorType='TRIM_HORIZON')['ShardIterator'])
+    iterators.extend(
+        dynamodbstreams.get_shard_iterator(
+            StreamArn=arn,
+            ShardId=shard['ShardId'],
+            ShardIteratorType='TRIM_HORIZON',
+        )['ShardIterator']
+        for shard in shards_info
+    )
 
     # We can read the one change we did in one of these iterators. The data
     # should be available immediately - no need for retries with timeout.
@@ -1491,7 +1502,7 @@ def test_streams_disabled_stream(test_table_ss_keys_only, dynamodbstreams):
         if 'NextShardIterator' in response:
             response = dynamodbstreams.get_records(ShardIterator=response['NextShardIterator'])
             assert len(response['Records']) == 0
-            assert not 'NextShardIterator' in response
+            assert 'NextShardIterator' not in response
     assert nrecords == 1
 
 # TODO: tests on multiple partitions

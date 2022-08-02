@@ -63,7 +63,7 @@ def test_query_sort_order_bytes(test_table_sb):
     # Insert a lot of random items in one new partition:
     # We arbitrarily use random_bytes with a random length.
     p = random_string()
-    items = [{'p': p, 'c': random_bytes(10)} for i in range(128)]
+    items = [{'p': p, 'c': random_bytes(10)} for _ in range(128)]
     with test_table_sb.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -266,7 +266,7 @@ def test_query_select(test_table_sn):
     # Select=COUNT just returns a count - not any items
     got = test_table_sn.query(ConsistentRead=True, KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'}}, Select='COUNT')
     assert got['Count'] == len(numbers)
-    assert not 'Items' in got
+    assert 'Items' not in got
     # Check again that we also get a count - not just with Select=COUNT,
     # but without Select=COUNT we also get the items:
     got = test_table_sn.query(ConsistentRead=True, KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'}})
@@ -311,7 +311,7 @@ def test_query_limit(test_table_sn):
         got_items = test_table_sn.query(ConsistentRead=True, KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'}}, Limit=limit)['Items']
         assert len(got_items) == min(limit, len(numbers))
         got_sort_keys = [x['c'] for x in got_items]
-        assert got_sort_keys == numbers[0:limit]
+        assert got_sort_keys == numbers[:limit]
     # Limit 0 is not allowed:
     with pytest.raises(ClientError, match='ValidationException.*[lL]imit'):
         test_table_sn.query(ConsistentRead=True, KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'}}, Limit=0)
@@ -405,11 +405,11 @@ def test_query_reverse(test_table_sn):
         got_items = test_table_sn.query(ConsistentRead=True, KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'}}, Limit=limit, ScanIndexForward=True)['Items']
         assert len(got_items) == min(limit, len(numbers))
         got_sort_keys = [x['c'] for x in got_items]
-        assert got_sort_keys == numbers[0:limit]
+        assert got_sort_keys == numbers[:limit]
         got_items = test_table_sn.query(ConsistentRead=True, KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'}}, Limit=limit, ScanIndexForward=False)['Items']
         assert len(got_items) == min(limit, len(numbers))
         got_sort_keys = [x['c'] for x in got_items]
-        assert got_sort_keys == reversed_numbers[0:limit]
+        assert got_sort_keys == reversed_numbers[:limit]
 
 # Test that paging also works properly with reverse order
 # (ScanIndexForward=false), i.e., reverse-order queries can be resumed
@@ -511,7 +511,7 @@ def test_query_missing_key(test_table):
 # *partition* keys, see test_scan_paging_bytes().
 def test_query_paging_bytes(test_table_sb):
     p = random_string()
-    items = [{'p': p, 'c': random_bytes()} for i in range(10)]
+    items = [{'p': p, 'c': random_bytes()} for _ in range(10)]
     with test_table_sb.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -526,7 +526,7 @@ def test_query_paging_bytes(test_table_sb):
 # Similar for test for string clustering keys
 def test_query_paging_string(test_table_ss):
     p = random_string()
-    items = [{'p': p, 'c': random_string()} for i in range(10)]
+    items = [{'p': p, 'c': random_string()} for _ in range(10)]
     with test_table_ss.batch_writer() as batch:
         for item in items:
             batch.put_item(item)

@@ -32,11 +32,13 @@ class DebianFilesTemplate(string.Template):
 
 scriptdir = os.path.dirname(__file__)
 
-with open(os.path.join(scriptdir, 'changelog.template')) as f:
-    changelog_template = f.read()
+changelog_template = Path(
+    os.path.join(scriptdir, 'changelog.template')
+).read_text()
 
-with open(os.path.join(scriptdir, 'control.template')) as f:
-    control_template = f.read()
+control_template = Path(
+    os.path.join(scriptdir, 'control.template')
+).read_text()
 
 with open('build/SCYLLA-PRODUCT-FILE') as f:
     product = f.read().strip()
@@ -64,9 +66,9 @@ if product != 'scylla':
         #    -> scylla-enterprise-conf.install
 
         if m := re.match(r'^scylla(-[^.]+)\.(service|default)$', p.name):
-            p.rename(p.parent / f'{product}{m.group(1)}.{p.name}')
+            p.rename(p.parent / f'{product}{m[1]}.{p.name}')
         elif m := re.match(r'^scylla(-[^.]+\.scylla-[^.]+\.[^.]+)$', p.name):
-            p.rename(p.parent / f'{product}{m.group(1)}')
+            p.rename(p.parent / f'{product}{m[1]}')
         else:
             p.rename(p.parent / p.name.replace('scylla', product, 1))
 

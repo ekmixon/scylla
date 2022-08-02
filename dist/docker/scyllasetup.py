@@ -33,7 +33,7 @@ class ScyllaSetup:
         self._extra_args = extra_arguments
 
     def _run(self, *args, **kwargs):
-        logging.info('running: {}'.format(args))
+        logging.info(f'running: {args}')
         subprocess.check_call(*args, **kwargs)
 
     def developerMode(self):
@@ -50,9 +50,9 @@ class ScyllaSetup:
         if 'workdir' not in cfg or not cfg['workdir']:
             cfg['workdir'] = '/var/lib/scylla'
         if 'data_file_directories' not in cfg or \
-                not cfg['data_file_directories'] or \
-                not len(cfg['data_file_directories']) or \
-                not " ".join(cfg['data_file_directories']).strip():
+                    not cfg['data_file_directories'] or \
+                    not len(cfg['data_file_directories']) or \
+                    not " ".join(cfg['data_file_directories']).strip():
             cfg['data_file_directories'] = [os.path.join(cfg['workdir'], 'data')]
 
         data_dirs = cfg["data_file_directories"]
@@ -69,7 +69,7 @@ class ScyllaSetup:
     def cqlshrc(self):
         home = os.environ['HOME']
         hostname = subprocess.check_output(['hostname', '-i']).decode('ascii').strip()
-        with open("%s/.cqlshrc" % home, "w") as cqlshrc:
+        with open(f"{home}/.cqlshrc", "w") as cqlshrc:
             cqlshrc.write("[connection]\nhostname = %s\n" % hostname)
 
     def set_housekeeping(self):
@@ -83,13 +83,13 @@ class ScyllaSetup:
     def arguments(self):
         args = []
         if self._memory is not None:
-            args += ["--memory %s" % self._memory]
+            args += [f"--memory {self._memory}"]
 
         if self._reserveMemory is not None:
-            args += ["--reserve-memory %s" % self._reserveMemory]
+            args += [f"--reserve-memory {self._reserveMemory}"]
 
         if self._smp is not None:
-            args += ["--smp %s" % self._smp]
+            args += [f"--smp {self._smp}"]
 
         if self._overprovisioned == "1" or (self._overprovisioned is None and self._cpuset is None):
             args += ["--overprovisioned"]
@@ -109,46 +109,49 @@ class ScyllaSetup:
             else:
                 self._seeds = self._listenAddress
 
-        args += ["--listen-address %s" % self._listenAddress,
-                 "--rpc-address %s" % self._rpcAddress,
-                 "--seed-provider-parameters seeds=%s" % self._seeds]
+        args += [
+            f"--listen-address {self._listenAddress}",
+            f"--rpc-address {self._rpcAddress}",
+            f"--seed-provider-parameters seeds={self._seeds}",
+        ]
+
 
         if self._broadcastAddress is not None:
-            args += ["--broadcast-address %s" % self._broadcastAddress]
+            args += [f"--broadcast-address {self._broadcastAddress}"]
         if self._broadcastRpcAddress is not None:
-            args += ["--broadcast-rpc-address %s" % self._broadcastRpcAddress]
+            args += [f"--broadcast-rpc-address {self._broadcastRpcAddress}"]
 
         if self._apiAddress is not None:
-            args += ["--api-address %s" % self._apiAddress]
+            args += [f"--api-address {self._apiAddress}"]
 
         if self._alternatorPort is not None:
-            args += ["--alternator-address %s" % self._alternatorAddress]
-            args += ["--alternator-port %s" % self._alternatorPort]
+            args += [f"--alternator-address {self._alternatorAddress}"]
+            args += [f"--alternator-port {self._alternatorPort}"]
 
         if self._alternatorHttpsPort is not None:
-            args += ["--alternator-address %s" % self._alternatorAddress]
-            args += ["--alternator-https-port %s" % self._alternatorHttpsPort]
+            args += [f"--alternator-address {self._alternatorAddress}"]
+            args += [f"--alternator-https-port {self._alternatorHttpsPort}"]
 
         if self._alternatorWriteIsolation is not None:
-            args += ["--alternator-write-isolation %s" % self._alternatorWriteIsolation]
+            args += [f"--alternator-write-isolation {self._alternatorWriteIsolation}"]
 
         if self._authenticator is not None:
-            args += ["--authenticator %s" % self._authenticator]
+            args += [f"--authenticator {self._authenticator}"]
 
         if self._authorizer is not None:
-            args += ["--authorizer %s" % self._authorizer]
+            args += [f"--authorizer {self._authorizer}"]
 
         if self._experimental == "1":
             args += ["--experimental=on"]
 
         if self._clusterName is not None:
-            args += ["--cluster-name %s" % self._clusterName]
+            args += [f"--cluster-name {self._clusterName}"]
 
         if self._endpointSnitch is not None:
-            args += ["--endpoint-snitch %s" % self._endpointSnitch]
+            args += [f"--endpoint-snitch {self._endpointSnitch}"]
 
         if self._replaceAddressFirstBoot is not None:
-            args += ["--replace-address-first-boot %s" % self._replaceAddressFirstBoot]
+            args += [f"--replace-address-first-boot {self._replaceAddressFirstBoot}"]
 
         args += ["--blocked-reactor-notify-ms 999999999"]
 

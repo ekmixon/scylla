@@ -31,7 +31,7 @@ def try_write(path, data):
     try:
         open(path, 'w').write(data)
     except Exception:
-        print("warning: unable to tune {} to {}".format(path, data))
+        print(f"warning: unable to tune {path} to {data}")
 
 
 # update a sysfs path if it does not satisfy a check
@@ -82,14 +82,14 @@ def tune_blockdev(path, nomerges):
 # tunes a /dev/foo blockdev
 def tune_dev(path, nomerges):
     dev = os.stat(path).st_rdev
-    devfile = '/sys/dev/block/{}:{}'.format(dev // 256, dev % 256)
+    devfile = f'/sys/dev/block/{dev // 256}:{dev % 256}'
     tune_blockdev(devfile, nomerges)
 
 
 # tunes a filesystem
 def tune_fs(path, nomerges):
     dev = os.stat(path).st_dev
-    devfile = '/sys/dev/block/{}:{}'.format(dev // 256, dev % 256)
+    devfile = f'/sys/dev/block/{dev // 256}:{dev % 256}'
     tune_blockdev(devfile, nomerges)
 
 

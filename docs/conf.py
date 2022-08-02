@@ -35,7 +35,7 @@ master_doc = 'contents'
 
 # General information about the project.
 project = 'Scylla Documentation'
-copyright = str(date.today().year) + ', ScyllaDB. All rights reserved.'
+copyright = f'{str(date.today().year)}, ScyllaDB. All rights reserved.'
 author = u'Scylla Project Contributors'
 
 # List of patterns, relative to source directory, that match files and

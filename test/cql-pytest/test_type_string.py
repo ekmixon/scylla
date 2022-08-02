@@ -26,10 +26,10 @@ from util import unique_name, random_string, random_bytes
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (p text primary key, a ascii, b blob, t text, v varchar)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # Test that "text" and "varchar" are not distinct types - they are nothing
 # more than an alias to the same thing. We confirm this fact by checking the

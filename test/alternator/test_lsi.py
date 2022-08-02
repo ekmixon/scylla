@@ -36,7 +36,7 @@ def assert_index_scan(table, index_name, expected_items, **kwargs):
 # A version doing retries instead of ConsistentRead, to be used just for the
 # one test below which has both GSI and LSI:
 def retrying_assert_index_query(table, index_name, expected_items, **kwargs):
-    for i in range(3):
+    for _ in range(3):
         if multiset(expected_items) == multiset(full_query(table, IndexName=index_name, ConsistentRead=False, **kwargs)):
             return
         print('retrying_assert_index_query retrying')
@@ -55,7 +55,7 @@ def test_lsi_identical(dynamodb):
                 'Projection': { 'ProjectionType': 'ALL' }
             }
         ])
-    items = [{'p': random_string(), 'c': random_string()} for i in range(10)]
+    items = [{'p': random_string(), 'c': random_string()} for _ in range(10)]
     with table.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
@@ -178,7 +178,11 @@ def test_table_lsi_1(dynamodb):
     table.delete()
 
 def test_lsi_1(test_table_lsi_1):
-    items1 = [{'p': random_string(), 'c': random_string(), 'b': random_string()} for i in range(10)]
+    items1 = [
+        {'p': random_string(), 'c': random_string(), 'b': random_string()}
+        for _ in range(10)
+    ]
+
     p1, b1 = items1[0]['p'], items1[0]['b']
     p2, b2 = random_string(), random_string()
     items2 = [{'p': p2, 'c': p2, 'b': b2}]
@@ -199,31 +203,49 @@ def test_lsi_1(test_table_lsi_1):
 # a local index is created on each non-key parameter
 @pytest.fixture(scope="module")
 def test_table_lsi_4(dynamodb):
-    table = create_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
+    table = create_test_table(
+        dynamodb,
+        KeySchema=[
+            {'AttributeName': 'p', 'KeyType': 'HASH'},
+            {'AttributeName': 'c', 'KeyType': 'RANGE'},
+        ],
         AttributeDefinitions=[
-                    { 'AttributeName': 'p', 'AttributeType': 'S' },
-                    { 'AttributeName': 'c', 'AttributeType': 'S' },
-                    { 'AttributeName': 'x1', 'AttributeType': 'S' },
-                    { 'AttributeName': 'x2', 'AttributeType': 'S' },
-                    { 'AttributeName': 'x3', 'AttributeType': 'S' },
-                    { 'AttributeName': 'x4', 'AttributeType': 'S' },
+            {'AttributeName': 'p', 'AttributeType': 'S'},
+            {'AttributeName': 'c', 'AttributeType': 'S'},
+            {'AttributeName': 'x1', 'AttributeType': 'S'},
+            {'AttributeName': 'x2', 'AttributeType': 'S'},
+            {'AttributeName': 'x3', 'AttributeType': 'S'},
+            {'AttributeName': 'x4', 'AttributeType': 'S'},
         ],
         LocalSecondaryIndexes=[
-            {   'IndexName': 'hello_' + column,
+            {
+                'IndexName': f'hello_{column}',
                 'KeySchema': [
-                    { 'AttributeName': 'p', 'KeyType': 'HASH' },
-                    { 'AttributeName': column, 'KeyType': 'RANGE' }
+                    {'AttributeName': 'p', 'KeyType': 'HASH'},
+                    {'AttributeName': column, 'KeyType': 'RANGE'},
                 ],
-                'Projection': { 'ProjectionType': 'ALL' }
-            } for column in ['x1','x2','x3','x4']
-        ])
+                'Projection': {'ProjectionType': 'ALL'},
+            }
+            for column in ['x1', 'x2', 'x3', 'x4']
+        ],
+    )
+
     yield table
     table.delete()
 
 def test_lsi_4(test_table_lsi_4):
-    items1 = [{'p': random_string(), 'c': random_string(),
-               'x1': random_string(), 'x2': random_string(), 'x3': random_string(), 'x4': random_string()} for i in range(10)]
+    items1 = [
+        {
+            'p': random_string(),
+            'c': random_string(),
+            'x1': random_string(),
+            'x2': random_string(),
+            'x3': random_string(),
+            'x4': random_string(),
+        }
+        for _ in range(10)
+    ]
+
     i_values = items1[0]
     i5 = random_string()
     items2 = [{'p': i5, 'c': i5, 'x1': i5, 'x2': i5, 'x3': i5, 'x4': i5}]
@@ -233,13 +255,35 @@ def test_lsi_4(test_table_lsi_4):
             batch.put_item(item)
     for column in ['x1', 'x2', 'x3', 'x4']:
         expected_items = [i for i in items if (i['p'], i[column]) == (i_values['p'], i_values[column])]
-        assert_index_query(test_table_lsi_4, 'hello_' + column, expected_items,
-            KeyConditions={'p': {'AttributeValueList': [i_values['p']], 'ComparisonOperator': 'EQ'},
-                           column: {'AttributeValueList': [i_values[column]], 'ComparisonOperator': 'EQ'}})
+        assert_index_query(
+            test_table_lsi_4,
+            f'hello_{column}',
+            expected_items,
+            KeyConditions={
+                'p': {
+                    'AttributeValueList': [i_values['p']],
+                    'ComparisonOperator': 'EQ',
+                },
+                column: {
+                    'AttributeValueList': [i_values[column]],
+                    'ComparisonOperator': 'EQ',
+                },
+            },
+        )
+
         expected_items = [i for i in items if (i['p'], i[column]) == (i5, i5)]
-        assert_index_query(test_table_lsi_4, 'hello_' + column, expected_items,
-            KeyConditions={'p': {'AttributeValueList': [i5], 'ComparisonOperator': 'EQ'},
-                           column: {'AttributeValueList': [i5], 'ComparisonOperator': 'EQ'}})
+        assert_index_query(
+            test_table_lsi_4,
+            f'hello_{column}',
+            expected_items,
+            KeyConditions={
+                'p': {'AttributeValueList': [i5], 'ComparisonOperator': 'EQ'},
+                column: {
+                    'AttributeValueList': [i5],
+                    'ComparisonOperator': 'EQ',
+                },
+            },
+        )
 
 # Test that setting an indexed string column to an empty string is illegal,
 # since keys cannot contain empty strings
@@ -281,7 +325,16 @@ def test_table_lsi_keys_only(dynamodb):
 # Check that it's possible to extract a non-projected attribute from the index,
 # as the documentation promises
 def test_lsi_get_not_projected_attribute(test_table_lsi_keys_only):
-    items1 = [{'p': random_string(), 'c': random_string(), 'b': random_string(), 'd': random_string()} for i in range(10)]
+    items1 = [
+        {
+            'p': random_string(),
+            'c': random_string(),
+            'b': random_string(),
+            'd': random_string(),
+        }
+        for _ in range(10)
+    ]
+
     p1, b1, d1 = items1[0]['p'], items1[0]['b'], items1[0]['d']
     p2, b2, d2 = random_string(), random_string(), random_string()
     items2 = [{'p': p2, 'c': p2, 'b': b2, 'd': d2}]
@@ -309,7 +362,16 @@ def test_lsi_get_not_projected_attribute(test_table_lsi_keys_only):
 # attributes are extracted
 @pytest.mark.xfail(reason="LSI in alternator currently only implement full projections")
 def test_lsi_get_all_projected_attributes(test_table_lsi_keys_only):
-    items1 = [{'p': random_string(), 'c': random_string(), 'b': random_string(), 'd': random_string()} for i in range(10)]
+    items1 = [
+        {
+            'p': random_string(),
+            'c': random_string(),
+            'b': random_string(),
+            'd': random_string(),
+        }
+        for _ in range(10)
+    ]
+
     p1, b1, d1 = items1[0]['p'], items1[0]['b'], items1[0]['d']
     p2, b2, d2 = random_string(), random_string(), random_string()
     items2 = [{'p': p2, 'c': p2, 'b': b2, 'd': d2}]
@@ -329,23 +391,33 @@ def test_lsi_get_all_projected_attributes(test_table_lsi_keys_only):
 @pytest.mark.xfail(reason="Projection and Select not supported yet. Issue #5036, #5058")
 def test_lsi_query_select(dynamodb):
     with new_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
-        AttributeDefinitions=[
-                    { 'AttributeName': 'p', 'AttributeType': 'S' },
-                    { 'AttributeName': 'c', 'AttributeType': 'S' },
-                    { 'AttributeName': 'b', 'AttributeType': 'S' },
-        ],
-        LocalSecondaryIndexes=[
-            {   'IndexName': 'hello',
-                'KeySchema': [
-                    { 'AttributeName': 'p', 'KeyType': 'HASH' },
-                    { 'AttributeName': 'b', 'KeyType': 'RANGE' }
-                ],
-                'Projection': { 'ProjectionType': 'INCLUDE',
-                                'NonKeyAttributes': ['a'] }
+            KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
+            AttributeDefinitions=[
+                        { 'AttributeName': 'p', 'AttributeType': 'S' },
+                        { 'AttributeName': 'c', 'AttributeType': 'S' },
+                        { 'AttributeName': 'b', 'AttributeType': 'S' },
+            ],
+            LocalSecondaryIndexes=[
+                {   'IndexName': 'hello',
+                    'KeySchema': [
+                        { 'AttributeName': 'p', 'KeyType': 'HASH' },
+                        { 'AttributeName': 'b', 'KeyType': 'RANGE' }
+                    ],
+                    'Projection': { 'ProjectionType': 'INCLUDE',
+                                    'NonKeyAttributes': ['a'] }
+                }
+            ]) as table:
+        items = [
+            {
+                'p': random_string(),
+                'c': random_string(),
+                'b': random_string(),
+                'a': random_string(),
+                'x': random_string(),
             }
-        ]) as table:
-        items = [{'p': random_string(), 'c': random_string(), 'b': random_string(), 'a': random_string(), 'x': random_string()} for i in range(10)]
+            for _ in range(10)
+        ]
+
         with table.batch_writer() as batch:
             for item in items:
                 batch.put_item(item)
@@ -380,15 +452,23 @@ def test_lsi_query_select(dynamodb):
             KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'},
                            'b': {'AttributeValueList': [b], 'ComparisonOperator': 'EQ'}})
         # Select=COUNT is also allowed, and as expected returns no content.
-        assert not 'Items' in table.query(ConsistentRead=False,
+        assert 'Items' not in table.query(
+            ConsistentRead=False,
             IndexName='hello',
             Select='COUNT',
-            KeyConditions={'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'},
-                           'b': {'AttributeValueList': [b], 'ComparisonOperator': 'EQ'}})
+            KeyConditions={
+                'p': {'AttributeValueList': [p], 'ComparisonOperator': 'EQ'},
+                'b': {'AttributeValueList': [b], 'ComparisonOperator': 'EQ'},
+            },
+        )
 
 # Check that strongly consistent reads are allowed for LSI
 def test_lsi_consistent_read(test_table_lsi_1):
-    items1 = [{'p': random_string(), 'c': random_string(), 'b': random_string()} for i in range(10)]
+    items1 = [
+        {'p': random_string(), 'c': random_string(), 'b': random_string()}
+        for _ in range(10)
+    ]
+
     p1, b1 = items1[0]['p'], items1[0]['b']
     p2, b2 = random_string(), random_string()
     items2 = [{'p': p2, 'c': p2, 'b': b2}]
@@ -447,7 +527,11 @@ def test_lsi_and_gsi(test_table_lsi_gsi):
     assert(sorted([lsi['IndexName'] for lsi in lsis]) == ['hello_l1'])
     assert(sorted([gsi['IndexName'] for gsi in gsis]) == ['hello_g1'])
 
-    items = [{'p': random_string(), 'c': random_string(), 'x1': random_string()} for i in range(17)]
+    items = [
+        {'p': random_string(), 'c': random_string(), 'x1': random_string()}
+        for _ in range(17)
+    ]
+
     p1, c1, x1 = items[0]['p'], items[0]['c'], items[0]['x1']
     with test_table_lsi_gsi.batch_writer() as batch:
         for item in items:

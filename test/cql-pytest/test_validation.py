@@ -30,10 +30,10 @@ from util import unique_name
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (k int primary key, a ascii, t text)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 #############################################################################
 # The following tests verify that inserting an invalid UTF-8 string into a

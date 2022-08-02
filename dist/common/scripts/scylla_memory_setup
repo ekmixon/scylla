@@ -45,10 +45,10 @@ if __name__ == '__main__':
     if args.lock_memory:
         conf_args.append('--lock-memory=1')
     if args.memory:
-        conf_args.append('--memory={}'.format(args.memory))
+        conf_args.append(f'--memory={args.memory}')
     if args.reserve_memory:
-        conf_args.append('--reserve-memory={}'.format(args.reserve_memory))
-    conf = 'MEM_CONF="{}"\n'.format(' '.join(conf_args))
+        conf_args.append(f'--reserve-memory={args.reserve_memory}')
+    conf = f"""MEM_CONF="{' '.join(conf_args)}"\n"""
 
     with open(str(etcdir_p() / 'scylla.d' / 'memory.conf'), 'w') as f:
         f.write(conf)

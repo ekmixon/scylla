@@ -27,10 +27,10 @@ from util import unique_name, random_string
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (p int primary key, t1 text, t2 text, t3 text, t4 text, t5 text, t6 text)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # When a too large request comes, it should be rejected in full.
 # That means that first of all a client receives an error after sending
@@ -51,7 +51,7 @@ def test_shed_too_large_request(cql, table1, scylla_only):
     with pytest.raises(InvalidRequest, match=re.compile('large', re.IGNORECASE)):
         cql.execute(prepared, [a_5mb_string]*6)
     cql.execute(prepared, ["small_string"]*6)
-    res = [row for row in cql.execute(f"SELECT p, t3 FROM {table1}")]
+    res = list(cql.execute(f"SELECT p, t3 FROM {table1}"))
     assert len(res) == 1 and res[0].p == 42 and res[0].t3 == "small_string"
 
 

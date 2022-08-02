@@ -33,22 +33,28 @@ def scylla_api_get(item, params={}):
         'Accept': 'application/json',
     }
 
-    response = requests.get('http://127.0.0.1:10000/{}'.format(item), headers=headers, params=params)
-    return response
+    return requests.get(
+        f'http://127.0.0.1:10000/{item}', headers=headers, params=params
+    )
 
 def toppartitions(kscf, duration, list_size, capacity):
-    r = scylla_api_get('column_family/toppartitions/{}'.format(kscf), {
-        'duration': str(duration),
-        'list_size': str(list_size),
-        'capacity': str(capacity)})
+    r = scylla_api_get(
+        f'column_family/toppartitions/{kscf}',
+        {
+            'duration': str(duration),
+            'list_size': str(list_size),
+            'capacity': str(capacity),
+        },
+    )
+
     return json.loads(r.text)
 
 def print_pks(title, map):
     print(title)
     w = reduce(lambda n, r: max(len(r['partition']), n), map, len('Partition')+3)
-    print(("  %-{}s%s".format(w)) % ('Partition', 'Count'))
+    print(f"  %-{w}s%s" % ('Partition', 'Count'))
     for r in map:
-        print(("  %-{}s%s".format(w)) % (r['partition'], r['count']))
+        print(f"  %-{w}s%s" % (r['partition'], r['count']))
     print()
 
 ap = argparse.ArgumentParser(description='Samples database reads and writes and reports the most active partitions in a specified table')
@@ -66,7 +72,13 @@ ap.add_argument('duration', type=int,
     help='Query duration in milliseconds')
 
 args = ap.parse_args()
-res = toppartitions("{}:{}".format(args.keyspace, args.table), args.duration, args.list_size, args.capacity)
+res = toppartitions(
+    f"{args.keyspace}:{args.table}",
+    args.duration,
+    args.list_size,
+    args.capacity,
+)
+
 if res == {}:
     print("(nothing reported)")
     exit(1)

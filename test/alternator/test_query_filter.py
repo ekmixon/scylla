@@ -43,13 +43,13 @@ def random_s():
 def random_b():
     return random_bytes(length=random.randint(7,15))
 def random_l():
-    return [random_i() for i in range(random.randint(1,3))]
+    return [random_i() for _ in range(random.randint(1,3))]
 def random_m():
     return {random_s(): random_i() for i in range(random.randint(1,3))}
 def random_set():
-    return set([random_i() for i in range(random.randint(1,3))])
+    return {random_i() for _ in range(random.randint(1,3))}
 def random_sets():
-    return set([random_s() for i in range(random.randint(1,3))])
+    return {random_s() for _ in range(random.randint(1,3))}
 def random_bool():
     return bool(random.randint(0,1))
 def random_item(p, i):
@@ -57,12 +57,10 @@ def random_item(p, i):
             'l': random_l(), 'm': random_m(), 'ns': random_set(),
             'ss': random_sets(), 'bool': random_bool() }
     # The "r" attribute doesn't appears on all items, and when it does it has a random type
-    if i == 0:
-        # Ensure that the first item always has an 'r' value.
-        t = random.randint(1,4)
-    else:
-        t = random.randint(0,4)
-    if t == 1:
+    t = random.randint(1,4) if i == 0 else random.randint(0,4)
+    if t == 0:
+        item['j'] = item['i']
+    elif t == 1:
         item['r'] = random_i()
     elif t == 2:
         item['r'] = random_s()
@@ -70,9 +68,6 @@ def random_item(p, i):
         item['r'] = random_b()
     elif t == 4:
         item['r'] = [random_i(), random_i()]   # a list
-    # Some of the items have j=i, others don't
-    if t == 0:
-        item['j'] = item['i']
     return item
 @pytest.fixture(scope="module")
 def test_table_sn_with_data(test_table_sn):
@@ -177,7 +172,7 @@ def test_query_filter_r_ne(test_table_sn_with_data):
     got_items = full_query(table,
         KeyConditions={ 'p': { 'AttributeValueList': [p], 'ComparisonOperator': 'EQ' }},
         QueryFilter={ 'r': { 'AttributeValueList': [r], 'ComparisonOperator': 'NE' }})
-    expected_items = [item for item in items if not 'r' in item or item['r'] != r]
+    expected_items = [item for item in items if 'r' not in item or item['r'] != r]
     assert(got_items == expected_items)
 
 # Test the LT operator on a numeric, string and bytes attributes:
@@ -187,7 +182,7 @@ def test_query_filter_r_ne(test_table_sn_with_data):
 def test_query_filter_lt(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b']:
-        print("testing {}".format(xn))
+        print(f"testing {xn}")
         xv = items[2][xn]
         got_items = full_query(table,
             KeyConditions={ 'p': { 'AttributeValueList': [p], 'ComparisonOperator': 'EQ' }},
@@ -310,7 +305,7 @@ def test_query_filter_in(test_table_sn_with_data):
         got_items = full_query(table,
             KeyConditions={ 'p': { 'AttributeValueList': [p], 'ComparisonOperator': 'EQ' }},
             QueryFilter={ xn: { 'AttributeValueList': [xv1, xv2, xv3], 'ComparisonOperator': 'IN' }})
-        expected_items = [item for item in items if item[xn] == xv1 or item[xn] == xv2 or item[xn] == xv3]
+        expected_items = [item for item in items if item[xn] in [xv1, xv2, xv3]]
         assert(got_items == expected_items)
 
 # The IN operator can have any number of parameters, but *not* zero.
@@ -336,7 +331,7 @@ def test_query_filter_in_different_types(test_table_sn_with_data):
 def test_query_filter_begins(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['s', 'b']:
-        start = items[2][xn][0:2]
+        start = items[2][xn][:2]
         got_items = full_query(table,
             KeyConditions={ 'p': { 'AttributeValueList': [p], 'ComparisonOperator': 'EQ' }},
             QueryFilter={ xn: { 'AttributeValueList': [start], 'ComparisonOperator': 'BEGINS_WITH' }})
@@ -375,7 +370,7 @@ def test_query_filter_contains_member(test_table_sn_with_data):
             if op == 'CONTAINS':
                 expected_items = [item for item in items if xv in item[xn]]
             else:
-                expected_items = [item for item in items if not xv in item[xn]]
+                expected_items = [item for item in items if xv not in item[xn]]
             assert(got_items == expected_items)
 
 def test_query_filter_contains_substring(test_table_sn_with_data):
@@ -390,7 +385,7 @@ def test_query_filter_contains_substring(test_table_sn_with_data):
             if op == 'CONTAINS':
                 expected_items = [item for item in items if substring in item[xn]]
             else:
-                expected_items = [item for item in items if not substring in item[xn]]
+                expected_items = [item for item in items if substring not in item[xn]]
             assert(got_items == expected_items)
 
 # Test the NULL and NOT_NULL operators. Note that despite the operator's
@@ -405,7 +400,7 @@ def test_query_filter_null(test_table_sn_with_data):
             KeyConditions={ 'p': { 'AttributeValueList': [p], 'ComparisonOperator': 'EQ' }},
             QueryFilter={ 'r': { 'AttributeValueList': [], 'ComparisonOperator': op }})
         if op == 'NULL':
-            expected_items = [item for item in items if not 'r' in item]
+            expected_items = [item for item in items if 'r' not in item]
         else:
             expected_items = [item for item in items if 'r' in item]
         assert(got_items == expected_items)
@@ -474,7 +469,7 @@ def test_query_filter_or(test_table_sn_with_data):
 def test_query_filter_invalid_conditional_operator(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for conditional_operator in ['DOG', 'and']:
-        with pytest.raises(ClientError, match='ValidationException.*'+conditional_operator):
+        with pytest.raises(ClientError, match=f'ValidationException.*{conditional_operator}'):
             full_query(table,
                 KeyConditions={ 'p': { 'AttributeValueList': [p], 'ComparisonOperator': 'EQ' }},
                 QueryFilter={ 'i': { 'AttributeValueList': [1], 'ComparisonOperator': 'EQ' },
@@ -537,7 +532,7 @@ def test_query_filter_paging(test_table_sn_with_data):
     # while DynamoDB returns len(items), but neither is more correct than the
     # other - nor should any user case about this difference, as empty pages
     # are a documented possibility.
-    assert(pages == len(items) or pages == len(items) + 1)
+    assert pages in [len(items), len(items) + 1]
 
 # Test that a QueryFilter and AttributesToGet may be given together.
 # In particular, test that QueryFilter may inspect attributes which will

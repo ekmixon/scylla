@@ -24,7 +24,10 @@ def test_health_works(dynamodb):
     url = dynamodb.meta.client._endpoint.host
     response = requests.get(url, verify=False)
     assert response.ok
-    assert response.content.decode('utf-8').strip()  == 'healthy: {}'.format(url.replace('https://', '').replace('http://', ''))
+    assert (
+        response.content.decode('utf-8').strip()
+        == f"healthy: {url.replace('https://', '').replace('http://', '')}"
+    )
 
 # Test that a health check only works for the root URL ('/')
 def test_health_only_works_for_root_path(dynamodb):

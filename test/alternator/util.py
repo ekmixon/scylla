@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from botocore.hooks import HierarchicalEmitter
 
 def random_string(length=10, chars=string.ascii_uppercase + string.digits):
-    return ''.join(random.choice(chars) for x in range(length))
+    return ''.join(random.choice(chars) for _ in range(length))
 
 def random_bytes(length=10):
     return bytearray(random.getrandbits(8) for _ in range(length))
@@ -56,7 +56,7 @@ def full_scan_and_count(table, ConsistentRead=True, **kwargs):
     if 'Items' in response:
         items.extend(response['Items'])
     if 'Count' in response:
-        count = count + response['Count']
+        count += response['Count']
     while 'LastEvaluatedKey' in response:
         response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'],
             ConsistentRead=ConsistentRead, **kwargs)
@@ -89,11 +89,11 @@ def full_query_and_counts(table, ConsistentRead=True, **kwargs):
     pages = 0
     if 'Items' in response:
         items.extend(response['Items'])
-        pages = pages + 1
+        pages += 1
     if 'Count' in response:
-        postfilter_count = postfilter_count + response['Count']
+        postfilter_count += response['Count']
     if 'ScannedCount' in response:
-        prefilter_count = prefilter_count + response['ScannedCount']
+        prefilter_count += response['ScannedCount']
     while 'LastEvaluatedKey' in response:
         response = table.query(ExclusiveStartKey=response['LastEvaluatedKey'],
             ConsistentRead=ConsistentRead, **kwargs)
@@ -136,7 +136,7 @@ unique_table_name.last_ms = 0
 
 def create_test_table(dynamodb, **kwargs):
     name = unique_table_name()
-    print("fixture creating new table {}".format(name))
+    print(f"fixture creating new table {name}")
     table = dynamodb.create_table(TableName=name,
         BillingMode='PAY_PER_REQUEST', **kwargs)
     waiter = table.meta.client.get_waiter('table_exists')

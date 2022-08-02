@@ -51,23 +51,29 @@ def with_tracing(dynamodb):
     # The REST API is on port 10000, and always http, not https.
     url = re.sub(r':[0-9]+(/|$)', ':10000', url)
     url = re.sub(r'^https:', 'http:', url)
-    probability_resp = requests.get(url+'/storage_service/trace_probability')
+    probability_resp = requests.get(f'{url}/storage_service/trace_probability')
     if probability_resp.status_code != 200:
         pytest.skip('Failed to fetch tracing probability')
     probability = probability_resp.text
-    response = requests.post(url+'/storage_service/trace_probability?probability=1')
+    response = requests.post(
+        f'{url}/storage_service/trace_probability?probability=1'
+    )
+
     if response.status_code != 200:
         pytest.skip('Failed to enable tracing')
     # verify tha tracing is really enabled
-    response = requests.get(url+'/storage_service/trace_probability')
+    response = requests.get(f'{url}/storage_service/trace_probability')
     if response.status_code != 200 or response.content.decode('utf-8') != '1':
         pytest.skip('Failed to verify tracing')
     yield
     print("with_tracing restoring tracing")
-    response = requests.post(url+'/storage_service/trace_probability?probability='+probability)
+    response = requests.post(
+        f'{url}/storage_service/trace_probability?probability={probability}'
+    )
+
     if response.status_code != 200:
         pytest.fail('Failed to disable tracing after with_tracing test')
-    response = requests.get(url+'/storage_service/trace_probability')
+    response = requests.get(f'{url}/storage_service/trace_probability')
     if response.status_code != 200 or response.content.decode('utf-8') != '0':
         pytest.skip('Failed to verify tracing disabled')
 
@@ -83,19 +89,19 @@ def with_slow_query_logging(dynamodb):
     # The REST API is on port 10000, and always http, not https.
     url = re.sub(r':[0-9]+(/|$)', ':10000', url)
     url = re.sub(r'^https:', 'http:', url)
-    slow_query_info = requests.get(url+'/storage_service/slow_query')
+    slow_query_info = requests.get(f'{url}/storage_service/slow_query')
     if slow_query_info.status_code != 200:
         pytest.skip('Failed to fetch slow query logging info')
     slow_query_json = json.loads(slow_query_info.text)
     print(slow_query_json)
-    response = requests.post(url+'/storage_service/slow_query?enable=true')
+    response = requests.post(f'{url}/storage_service/slow_query?enable=true')
     if response.status_code != 200:
         pytest.skip('Failed to enable slow query logging')
-    response = requests.post(url+'/storage_service/slow_query?threshold=0')
+    response = requests.post(f'{url}/storage_service/slow_query?threshold=0')
     if response.status_code != 200:
         pytest.skip('Failed to enable slow query logging threshold')
     # verify that logging is really enabled
-    response = requests.get(url+'/storage_service/slow_query')
+    response = requests.get(f'{url}/storage_service/slow_query')
     if response.status_code != 200:
         pytest.skip('Failed to verify slow query logging')
     response_json = json.loads(response.text)
@@ -104,10 +110,18 @@ def with_slow_query_logging(dynamodb):
     print(response_json)
     yield
     print("with_slow_query_logging restoring slow query logging")
-    response = requests.post(url+'/storage_service/slow_query?enable='+str(slow_query_json['enable']))
+    response = requests.post(
+        f'{url}/storage_service/slow_query?enable='
+        + str(slow_query_json['enable'])
+    )
+
     if response.status_code != 200:
         pytest.fail('Failed to restore slow query logging')
-    response = requests.post(url+'/storage_service/slow_query?threshold='+str(slow_query_json['threshold']))
+    response = requests.post(
+        f'{url}/storage_service/slow_query?threshold='
+        + str(slow_query_json['threshold'])
+    )
+
     if response.status_code != 200:
         pytest.fail('Failed to restore slow query logging threshold')
 
@@ -132,7 +146,7 @@ def find_tracing_session(dynamodb, str):
     global last_scan
     trace_sessions_table = dynamodb.Table('.scylla.alternator.system_traces.sessions')
     start = time.time()
-    if last_scan == None:
+    if last_scan is None:
         # The trace tables have RF=2, even on a one-node test setup, and
         # thus fail reads with ConsistentRead=True (Quorum)...
         last_scan = full_scan(trace_sessions_table, ConsistentRead=False)
@@ -151,17 +165,11 @@ def find_tracing_session(dynamodb, str):
 # the textual "activity" strings, and return them sorted like they were in
 # the events table (i.e., by time).
 def get_tracing_events(dynamodb, session_id):
-    ret = []
     trace_events_table = dynamodb.Table('.scylla.alternator.system_traces.events')
     results = full_query(trace_events_table, ConsistentRead=False,
         KeyConditionExpression='session_id = :s',
         ExpressionAttributeValues={':s': session_id})
-    for result in results:
-        # as explained above, we only save the 'activity' string. There are
-        # other interesting fields (like 'source_elapsed', the elapsed time)
-        # which we don't save.
-        ret.append(result['activity'])
-    return ret
+    return [result['activity'] for result in results]
 
 # We have no way to know whether the tracing events returned by
 # get_tracing_events() is the entire trace. Even though we have already seen
@@ -176,7 +184,7 @@ def expect_tracing_events(dynamodb, str, expected_events):
     while time.time() - start < 100:
         events = get_tracing_events(dynamodb, session)
         for event in expected_events:
-            if not event in events:
+            if event not in events:
                 break
         else:
             # Success!

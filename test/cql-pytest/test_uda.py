@@ -36,8 +36,13 @@ def test_custom_avg(scylla_only, cql, test_keyspace):
         with new_function(cql, test_keyspace, avg_partial_body) as avg_partial, new_function(cql, test_keyspace, div_body) as div_fun:
             custom_avg_body = f"(bigint) SFUNC {avg_partial} STYPE tuple<bigint, bigint> FINALFUNC {div_fun} INITCOND (0,0)"
             with new_aggregate(cql, test_keyspace, custom_avg_body) as custom_avg:
-                custom_res = [row for row in cql.execute(f"SELECT {test_keyspace}.{custom_avg}(id) AS result FROM {table}")]
-                avg_res = [row for row in cql.execute(f"SELECT avg(id) AS result FROM {table}")]
+                custom_res = list(
+                    cql.execute(
+                        f"SELECT {test_keyspace}.{custom_avg}(id) AS result FROM {table}"
+                    )
+                )
+
+                avg_res = list(cql.execute(f"SELECT avg(id) AS result FROM {table}"))
                 assert custom_res == avg_res
 
 # Test that computing an aggregate which takes 2 parameters works fine.
@@ -52,7 +57,12 @@ def test_map_literal_builder(scylla_only, cql, test_keyspace):
         with new_function(cql, test_keyspace, map_literal_partial_body) as map_literal_partial, new_function(cql, test_keyspace, finish_body) as finish_fun:
             map_literal_body = f"(text, int) SFUNC {map_literal_partial} STYPE text FINALFUNC {finish_fun} INITCOND '{{'"
             with new_aggregate(cql, test_keyspace, map_literal_body) as map_literal:
-                map_res = [row for row in cql.execute(f"SELECT {test_keyspace}.{map_literal}(k, val) AS result FROM {table}")]
+                map_res = list(
+                    cql.execute(
+                        f"SELECT {test_keyspace}.{map_literal}(k, val) AS result FROM {table}"
+                    )
+                )
+
                 assert len(map_res) == 1 and map_res[0].result == '{a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7,}'
 
 # Test that the state function and final function must exist and have correct signatures

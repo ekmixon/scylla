@@ -99,6 +99,6 @@ def test_authorization_no_whitespace(dynamodb, test_table):
     # Let's remove all of them except the first one (which separates the
     # signature algorithm name from the rest) and check the result still works:
     a = req.headers['Authorization'].split()
-    req.headers['Authorization'] = a[0] + ' ' + ''.join(a[1:])
+    req.headers['Authorization'] = f'{a[0]} ' + ''.join(a[1:])
     response = requests.post(req.url, headers=req.headers, data=req.body, verify=False)
     assert response.ok

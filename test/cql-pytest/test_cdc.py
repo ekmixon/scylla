@@ -32,7 +32,13 @@ def test_cdc_log_entries_use_cdc_streams(scylla_only, cql, test_keyspace):
         for i in range(100):
             cql.execute(stmt, [i])
 
-        log_stream_ids = set(r[0] for r in cql.execute(f'select "cdc$stream_id" from {table}_scylla_cdc_log'))
+        log_stream_ids = {
+            r[0]
+            for r in cql.execute(
+                f'select "cdc$stream_id" from {table}_scylla_cdc_log'
+            )
+        }
+
 
     # There should be exactly one generation, so we just select the streams
     streams_desc = cql.execute(SimpleStatement(

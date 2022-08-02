@@ -57,7 +57,7 @@ def metrics(dynamodb):
     # The Prometheus API is on port 9180, and always http, not https.
     url = re.sub(r':[0-9]+(/|$)', ':9180', url)
     url = re.sub(r'^https:', 'http:', url)
-    url = url + '/metrics'
+    url = f'{url}/metrics'
     resp = requests.get(url)
     if resp.status_code != 200:
         pytest.skip('Metrics port 9180 is not available')
@@ -79,7 +79,7 @@ def get_metric(metrics, name, requested_labels=None, the_metrics=None):
     if not the_metrics:
         the_metrics = get_metrics(metrics)
     total = 0.0
-    lines = re.compile('^'+name+'{.*$', re.MULTILINE)
+    lines = re.compile(f'^{name}' + '{.*$', re.MULTILINE)
     for match in re.findall(lines, the_metrics):
         a = match.split()
         metric = a[0]
@@ -91,7 +91,7 @@ def get_metric(metrics, name, requested_labels=None, the_metrics=None):
             got_labels = metric[len(name)+1:-1].split(',')
             # Check that every one of the requested labels is in got_labels:
             for k, v in requested_labels.items():
-                if not f'{k}="{v}"' in got_labels:
+                if f'{k}="{v}"' not in got_labels:
                     # No match for requested label, skip this metric (python
                     # doesn't have "continue 2" so let's just set val to 0...
                     val = 0

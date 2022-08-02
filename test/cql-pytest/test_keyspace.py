@@ -63,7 +63,7 @@ def test_create_keyspace_invalid_name(cql, this_dc):
     # The name xyz!123, unquoted, is a syntax error. With quotes it's valid
     # syntax, but an illegal name.
     with pytest.raises(SyntaxException):
-        cql.execute('CREATE KEYSPACE xyz!123' + rep)
+        cql.execute(f'CREATE KEYSPACE xyz!123{rep}')
     with pytest.raises(InvalidRequest, match='name'):
         cql.execute('CREATE KEYSPACE "xyz!123"' + rep)
     # The documentation claims that only letters and numbers - i.e., not
@@ -72,13 +72,13 @@ def test_create_keyspace_invalid_name(cql, this_dc):
     # with an underscore results in a syntax error in the parser, it quotes
     # such names *are* allowed:
     with pytest.raises(SyntaxException):
-        cql.execute('CREATE KEYSPACE _xyz' + rep)
+        cql.execute(f'CREATE KEYSPACE _xyz{rep}')
     cql.execute('CREATE KEYSPACE "_xyz"' + rep)
     cql.execute('DROP KEYSPACE "_xyz"')
     # As the documentation states, a keyspace name may begin with a number.
     # But such a name is not allowed by the parser, so it needs to be quoted:
     with pytest.raises(SyntaxException):
-        cql.execute('CREATE KEYSPACE 123' + rep)
+        cql.execute(f'CREATE KEYSPACE 123{rep}')
     cql.execute('CREATE KEYSPACE "123"' + rep)
     cql.execute('DROP KEYSPACE "123"')
 

@@ -291,7 +291,7 @@ def test_create_table_special_column_name(test_table_special_column_name):
 def test_list_tables_paginated(dynamodb, test_table, test_table_s, test_table_b):
     my_tables_set = {table.name for table in [test_table, test_table_s, test_table_b]}
     for limit in [1, 2, 3, 4, 50, 100]:
-        print("testing limit={}".format(limit))
+        print(f"testing limit={limit}")
         list_tables_set = set(list_tables(dynamodb, limit))
         assert my_tables_set.issubset(list_tables_set)
 

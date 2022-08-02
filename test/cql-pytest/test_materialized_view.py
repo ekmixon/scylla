@@ -35,7 +35,7 @@ def test_build_view_with_large_row(cql, test_keyspace):
         try:
             retrieved_row = False
             for _ in range(50):
-                res = [row for row in cql.execute(f"SELECT * FROM {test_keyspace}.{mv}")]
+                res = list(cql.execute(f"SELECT * FROM {test_keyspace}.{mv}"))
                 if len(res) == 1 and res[0].v == big:
                     retrieved_row = True
                     break
@@ -55,7 +55,7 @@ def test_update_view_with_large_row(cql, test_keyspace):
         try:
             big = 'x'*11*1024*1024
             cql.execute(f"INSERT INTO {table}(p,c,v) VALUES (1,1,'{big}')")
-            res = [row for row in cql.execute(f"SELECT * FROM {test_keyspace}.{mv}")]
+            res = list(cql.execute(f"SELECT * FROM {test_keyspace}.{mv}"))
             assert len(res) == 1 and res[0].v == big
         finally:
             cql.execute(f"DROP MATERIALIZED VIEW {test_keyspace}.{mv}")

@@ -42,7 +42,7 @@ def passes_or_raises(expected_exception, match=None):
         # the "or not" case.
         return
     except expected_exception as err:
-        if match == None or re.search(match, str(err)):
+        if match is None or re.search(match, str(err)):
             # The raises_or_not() passed on as the "raises" case
             return
         pytest.fail(f"exception message '{err}' did not match '{match}'")
@@ -56,7 +56,7 @@ def test_describe_ttl_without_ttl(test_table):
     assert 'TimeToLiveDescription' in response
     assert 'TimeToLiveStatus' in response['TimeToLiveDescription']
     assert response['TimeToLiveDescription']['TimeToLiveStatus'] == 'DISABLED'
-    assert not 'AttributeName' in response['TimeToLiveDescription']
+    assert 'AttributeName' not in response['TimeToLiveDescription']
 
 # Test that UpdateTimeToLive can be used to pick an expiration-time attribute
 # and this information becomes available via DescribeTimeToLive
@@ -210,8 +210,8 @@ def test_ttl_expiration(dynamodb):
     delta = math.ceil(duration / 4)
     assert delta >= 1
     with new_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, ],
-        AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' } ]) as table:
+            KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, ],
+            AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' } ]) as table:
         # Insert one expiring item *before* enabling the TTL, to verify that
         # items that already exist when TTL is configured also get handled.
         p0 = random_string()
@@ -262,7 +262,14 @@ def test_ttl_expiration(dynamodb):
         # implementation, it did).
         p8 = random_string()
         with client_no_transform(table.meta.client) as client:
-            client.put_item(TableName=table.name, Item={'p': {'S': p8}, 'expiration': {'N': str((int(time.time())-60)//10) + "e1"}})
+            client.put_item(
+                TableName=table.name,
+                Item={
+                    'p': {'S': p8},
+                    'expiration': {'N': f"{str((int(time.time())-60)//10)}e1"},
+                },
+            )
+
         # Similarly, floating point expiration time like 12345678.1 should
         # also be fine (note that Python's time.time() returns floating point).
         # This item should also be expired ASAP too.
@@ -272,16 +279,19 @@ def test_ttl_expiration(dynamodb):
 
         def check_expired():
             # After the delay, p1,p3,p5,p6,p7 should be alive, p0,p2,p4 should not
-            return not 'Item' in table.get_item(Key={'p': p0}) \
-                and 'Item' in table.get_item(Key={'p': p1}) \
-                and not 'Item' in table.get_item(Key={'p': p2}) \
-                and 'Item' in table.get_item(Key={'p': p3}) \
-                and not 'Item' in table.get_item(Key={'p': p4}) \
-                and 'Item' in table.get_item(Key={'p': p5}) \
-                and 'Item' in table.get_item(Key={'p': p6}) \
-                and 'Item' in table.get_item(Key={'p': p7}) \
-                and not 'Item' in table.get_item(Key={'p': p8}) \
-                and not 'Item' in table.get_item(Key={'p': p9})
+            return (
+                'Item' not in table.get_item(Key={'p': p0})
+                and 'Item' in table.get_item(Key={'p': p1})
+                and 'Item' not in table.get_item(Key={'p': p2})
+                and 'Item' in table.get_item(Key={'p': p3})
+                and 'Item' not in table.get_item(Key={'p': p4})
+                and 'Item' in table.get_item(Key={'p': p5})
+                and 'Item' in table.get_item(Key={'p': p6})
+                and 'Item' in table.get_item(Key={'p': p7})
+                and 'Item' not in table.get_item(Key={'p': p8})
+                and 'Item' not in table.get_item(Key={'p': p9})
+            )
+
 
         # We could have just done time.sleep(duration) here, but in case a
         # user is watching this long test, let's output the status every
@@ -332,10 +342,10 @@ def test_ttl_expiration_with_rangekey(dynamodb):
     # is expired.
     max_duration = 1200 if is_aws(dynamodb) else 10
     with new_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' },
-                    { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
-        AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' },
-                               { 'AttributeName': 'c', 'AttributeType': 'S' }]) as table:
+            KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' },
+                        { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
+            AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' },
+                                   { 'AttributeName': 'c', 'AttributeType': 'S' }]) as table:
         # Enable TTL, using the attribute "expiration":
         client = table.meta.client
         ttl_spec = {'AttributeName': 'expiration', 'Enabled': True}
@@ -353,13 +363,13 @@ def test_ttl_expiration_with_rangekey(dynamodb):
         c2 = random_string()
         table.put_item(Item={'p': p2, 'c': c2, 'expiration': int(time.time())-60})
         start_time = time.time()
-        while time.time() < start_time + max_duration:
-            if ('Item' in table.get_item(Key={'p': p1, 'c': c1})) and not ('Item' in table.get_item(Key={'p': p2, 'c': c2})):
-                # p2 expired, p1 didn't. We're done
-                break
+        while time.time() < start_time + max_duration and not (
+            'Item' in table.get_item(Key={'p': p1, 'c': c1})
+            and 'Item' not in table.get_item(Key={'p': p2, 'c': c2})
+        ):
             time.sleep(max_duration/15.0)
         assert 'Item' in table.get_item(Key={'p': p1, 'c': c1})
-        assert not 'Item' in table.get_item(Key={'p': p2, 'c': c2})
+        assert 'Item' not in table.get_item(Key={'p': p2, 'c': c2})
 
 # While it probably makes little sense to do this, the designated
 # expiration-time attribute *may* be the hash or range key attributes.
@@ -370,8 +380,8 @@ def test_ttl_expiration_with_rangekey(dynamodb):
 def test_ttl_expiration_hash(dynamodb):
     duration = 1200 if is_aws(dynamodb) else 10
     with new_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, ],
-        AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'N' } ]) as table:
+            KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, ],
+            AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'N' } ]) as table:
         ttl_spec = {'AttributeName': 'p', 'Enabled': True}
         table.meta.client.update_time_to_live(TableName=table.name,
             TimeToLiveSpecification=ttl_spec)
@@ -384,7 +394,10 @@ def test_ttl_expiration_hash(dynamodb):
         start_time = time.time()
 
         def check_expired():
-            return not 'Item' in table.get_item(Key={'p': p1}) and 'Item' in table.get_item(Key={'p': p2})
+            return 'Item' not in table.get_item(
+                Key={'p': p1}
+            ) and 'Item' in table.get_item(Key={'p': p2})
+
 
         while time.time() < start_time + duration:
             print(f"--- {int(time.time()-start_time)} seconds")
@@ -402,8 +415,8 @@ def test_ttl_expiration_hash(dynamodb):
 def test_ttl_expiration_range(dynamodb):
     duration = 1200 if is_aws(dynamodb) else 10
     with new_test_table(dynamodb,
-        KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
-        AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' }, { 'AttributeName': 'c', 'AttributeType': 'N' } ]) as table:
+            KeySchema=[ { 'AttributeName': 'p', 'KeyType': 'HASH' }, { 'AttributeName': 'c', 'KeyType': 'RANGE' } ],
+            AttributeDefinitions=[ { 'AttributeName': 'p', 'AttributeType': 'S' }, { 'AttributeName': 'c', 'AttributeType': 'N' } ]) as table:
         ttl_spec = {'AttributeName': 'c', 'Enabled': True}
         table.meta.client.update_time_to_live(TableName=table.name,
             TimeToLiveSpecification=ttl_spec)
@@ -417,7 +430,10 @@ def test_ttl_expiration_range(dynamodb):
         start_time = time.time()
 
         def check_expired():
-            return not 'Item' in table.get_item(Key={'p': p, 'c': c1}) and 'Item' in table.get_item(Key={'p': p, 'c': c2})
+            return 'Item' not in table.get_item(
+                Key={'p': p, 'c': c1}
+            ) and 'Item' in table.get_item(Key={'p': p, 'c': c2})
+
 
         while time.time() < start_time + duration:
             print(f"--- {int(time.time()-start_time)} seconds")
@@ -615,18 +631,18 @@ def test_ttl_expiration_streams(dynamodb, dynamodbstreams):
     # max_duration, we report a failure.
     max_duration = 3600 if is_aws(dynamodb) else 10
     with new_test_table(dynamodb,
-        KeySchema=[
-            { 'AttributeName': 'p', 'KeyType': 'HASH' },
-            { 'AttributeName': 'c', 'KeyType': 'RANGE' },
-        ],
-        AttributeDefinitions=[
-            { 'AttributeName': 'p', 'AttributeType': 'S' },
-            { 'AttributeName': 'c', 'AttributeType': 'S' },
-        ],
-        StreamSpecification={
-            'StreamEnabled': True,
-            'StreamViewType':  'NEW_AND_OLD_IMAGES'}
-        ) as table:
+            KeySchema=[
+                { 'AttributeName': 'p', 'KeyType': 'HASH' },
+                { 'AttributeName': 'c', 'KeyType': 'RANGE' },
+            ],
+            AttributeDefinitions=[
+                { 'AttributeName': 'p', 'AttributeType': 'S' },
+                { 'AttributeName': 'c', 'AttributeType': 'S' },
+            ],
+            StreamSpecification={
+                'StreamEnabled': True,
+                'StreamViewType':  'NEW_AND_OLD_IMAGES'}
+            ) as table:
         ttl_spec = {'AttributeName': 'expiration', 'Enabled': True}
         table.meta.client.update_time_to_live(TableName=table.name,
             TimeToLiveSpecification=ttl_spec)
@@ -661,7 +677,7 @@ def test_ttl_expiration_streams(dynamodb, dynamodbstreams):
         event_found = False
         while time.time() < start_time + max_duration:
             print(f"--- {int(time.time()-start_time)} seconds")
-            item_expired = not 'Item' in table.get_item(Key={'p': p, 'c': c})
+            item_expired = 'Item' not in table.get_item(Key={'p': p, 'c': c})
             for record in read_entire_stream(dynamodbstreams, table):
                 # An expired item has a specific userIdentity as follows:
                 if record.get('userIdentity') == { 'Type': 'Service', 'PrincipalId': 'dynamodb.amazonaws.com' }:
@@ -685,7 +701,7 @@ def test_ttl_expiration_streams(dynamodb, dynamodbstreams):
 def read_entire_stream(dynamodbstreams, table):
     # Look for the latest stream. If there is none, return nothing
     desc = table.meta.client.describe_table(TableName=table.name)['Table']
-    if not 'LatestStreamArn' in desc:
+    if 'LatestStreamArn' not in desc:
         return []
     arn = desc['LatestStreamArn']
     # List all shards of the stream in an array "shards":

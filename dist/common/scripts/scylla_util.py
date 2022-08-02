@@ -44,9 +44,7 @@ from multiprocessing import cpu_count
 
 def scriptsdir_p():
     p = Path(sys.argv[0]).resolve()
-    if p.parent.name == 'libexec':
-        return p.parents[1]
-    return p.parent
+    return p.parents[1] if p.parent.name == 'libexec' else p.parent
 
 def scylladir_p():
     p = scriptsdir_p()
@@ -59,22 +57,13 @@ def is_offline():
     return Path(scylladir_p() / 'SCYLLA-OFFLINE-FILE').exists()
 
 def bindir_p():
-    if is_nonroot():
-        return scylladir_p() / 'bin'
-    else:
-        return Path('/usr/bin')
+    return scylladir_p() / 'bin' if is_nonroot() else Path('/usr/bin')
 
 def etcdir_p():
-    if is_nonroot():
-        return scylladir_p() / 'etc'
-    else:
-        return Path('/etc')
+    return scylladir_p() / 'etc' if is_nonroot() else Path('/etc')
 
 def datadir_p():
-    if is_nonroot():
-        return scylladir_p()
-    else:
-        return Path('/var/lib/scylla')
+    return scylladir_p() if is_nonroot() else Path('/var/lib/scylla')
 
 def scyllabindir_p():
     return scylladir_p() / 'bin'
@@ -110,10 +99,7 @@ def curl(url, headers=None, byte=False, timeout=3, max_retries=5, retry_interval
         try:
             req = urllib.request.Request(url, headers=headers or {})
             with urllib.request.urlopen(req, timeout=timeout) as res:
-                if byte:
-                    return res.read()
-                else:
-                    return res.read().decode('utf-8')
+                return res.read() if byte else res.read().decode('utf-8')
         except urllib.error.URLError:
             time.sleep(retry_interval)
             retries += 1
@@ -160,14 +146,17 @@ class gcp_instance:
         return False
 
     def __instance_metadata(self, path, recursive=False):
-        return curl(self.META_DATA_BASE_URL + path + "?recursive=%s" % str(recursive).lower(),
-                    headers={"Metadata-Flavor": "Google"})
+        return curl(
+            self.META_DATA_BASE_URL
+            + path
+            + f"?recursive={str(recursive).lower()}",
+            headers={"Metadata-Flavor": "Google"},
+        )
 
     def is_in_root_devs(self, x, root_devs):
-        for root_dev in root_devs:
-            if root_dev.startswith(os.path.join("/dev/", x)):
-                return True
-        return False
+        return any(
+            root_dev.startswith(os.path.join("/dev/", x)) for root_dev in root_devs
+        )
 
     def _non_root_nvmes(self):
         """get list of nvme disks from os, filter away if one of them is root"""
@@ -195,10 +184,8 @@ class gcp_instance:
     def os_disks(self):
         """populate disks from /dev/ and root mountpoint"""
         if self.__osDisks is None:
-            __osDisks = {}
             nvmes_present = self._non_root_nvmes()
-            for k, v in nvmes_present.items():
-                __osDisks[k] = v
+            __osDisks = dict(nvmes_present.items())
             disks_present = self._non_root_disks()
             for k, v in disks_present.items():
                 __osDisks[k] = v
@@ -216,9 +203,7 @@ class gcp_instance:
     @staticmethod
     def isNVME(gcpdiskobj):
         """check if disk from GCP metadata is a NVME disk"""
-        if gcpdiskobj["interface"]=="NVME":
-            return True
-        return False
+        return gcpdiskobj["interface"] == "NVME"
 
     def __get_nvme_disks_from_metadata(self):
         """get list of nvme disks from metadata server"""
@@ -245,7 +230,7 @@ class gcp_instance:
                 count_os_disks=0
             nvme_metadata_disks = self.__get_nvme_disks_from_metadata()
             count_metadata_nvme_disks=len(nvme_metadata_disks)
-            self.__nvmeDiskCount = count_os_disks if count_os_disks<count_metadata_nvme_disks else count_metadata_nvme_disks
+            self.__nvmeDiskCount = min(count_os_disks, count_metadata_nvme_disks)
         return self.__nvmeDiskCount
 
     @property
@@ -288,23 +273,17 @@ class gcp_instance:
         """Returns if this instance type belongs to unsupported ones for nvmes"""
         if self.instancetype == self.m1supported:
             return False
-        if self.instance_class() in ['e2', 'f1', 'g1', 'm2', 'm1']:
-            return True
-        return False
+        return self.instance_class() in ['e2', 'f1', 'g1', 'm2', 'm1']
 
     def is_supported_instance_class(self):
         """Returns if this instance type belongs to supported ones for nvmes"""
         if self.instancetype == self.m1supported:
             return True
-        if self.instance_class() in ['n1', 'n2', 'n2d' ,'c2']:
-            return True
-        return False
+        return self.instance_class() in ['n1', 'n2', 'n2d' ,'c2']
 
     def is_recommended_instance_size(self):
         """if this instance has at least 2 cpus, it has a recommended size"""
-        if int(self.instance_size()) > 1:
-            return True
-        return False
+        return int(self.instance_size()) > 1
 
     @staticmethod
     def get_file_size_by_seek(filename):
@@ -421,10 +400,9 @@ class azure_instance:
         return curl(self.META_DATA_BASE_URL + path + self.API_VERSION + "&format=text", headers = { "Metadata": "True" })
 
     def is_in_root_devs(self, x, root_devs):
-        for root_dev in root_devs:
-            if root_dev.startswith(os.path.join("/dev/", x)):
-                return True
-        return False
+        return any(
+            root_dev.startswith(os.path.join("/dev/", x)) for root_dev in root_devs
+        )
 
     def _non_root_nvmes(self):
         """get list of nvme disks from os, filter away if one of them is root"""
@@ -454,10 +432,8 @@ class azure_instance:
     def os_disks(self):
         """populate disks from /dev/ and root mountpoint"""
         if self.__osDisks is None:
-            __osDisks = {}
             nvmes_present = self._non_root_nvmes()
-            for k, v in nvmes_present.items():
-                __osDisks[k] = v
+            __osDisks = dict(nvmes_present.items())
             disks_present = self._non_root_disks()
             for k, v in disks_present.items():
                 __osDisks[k] = v
@@ -484,7 +460,7 @@ class azure_instance:
                 print(e)
                 count_os_disks = 0
             count_metadata_nvme_disks = self.__get_nvme_disks_count_from_metadata()
-            self.__nvmeDiskCount = count_os_disks if count_os_disks < count_metadata_nvme_disks else count_metadata_nvme_disks
+            self.__nvmeDiskCount = min(count_os_disks, count_metadata_nvme_disks)
         return self.__nvmeDiskCount
 
     instanceToDiskCount = {
@@ -549,20 +525,17 @@ class azure_instance:
 
     def is_supported_instance_class(self):
         """Returns if this instance type belongs to supported ones for nvmes"""
-        if self.instance_class() in list(self.instanceToDiskCount.keys()):
-            return True
-        return False
+        return self.instance_class() in list(self.instanceToDiskCount.keys())
 
     def is_recommended_instance_size(self):
         """if this instance has at least 2 cpus, it has a recommended size"""
-        if int(self.instance_size()) > 1:
-            return True
-        return False
+        return int(self.instance_size()) > 1
 
     def is_recommended_instance(self):
-        if self.is_unsupported_instance_class() and self.is_supported_instance_class():
-            return True
-        return False
+        return bool(
+            self.is_unsupported_instance_class()
+            and self.is_supported_instance_class()
+        )
 
     def private_ipv4(self):
         return self.__instance_metadata("/network/interface/0/ipv4/ipAddress/0/privateIpAddress")
@@ -583,18 +556,18 @@ class aws_instance:
 
     def __disk_name(self, dev):
         name = re.compile(r"(?:/dev/)?(?P<devname>[a-zA-Z]+)\d*")
-        return name.search(dev).group("devname")
+        return name.search(dev)["devname"]
 
     def __instance_metadata(self, path):
-        return curl(self.META_DATA_BASE_URL + "meta-data/" + path)
+        return curl(f"{self.META_DATA_BASE_URL}meta-data/{path}")
 
     def __device_exists(self, dev):
-        if dev[0:4] != "/dev":
-            dev = "/dev/%s" % dev
+        if dev[:4] != "/dev":
+            dev = f"/dev/{dev}"
         return os.path.exists(dev)
 
     def __xenify(self, devname):
-        dev = self.__instance_metadata('block-device-mapping/' + devname)
+        dev = self.__instance_metadata(f'block-device-mapping/{devname}')
         return dev.replace("sd", "xvd")
 
     def __filter_nvmes(self, dev, dev_type):
@@ -602,7 +575,7 @@ class aws_instance:
         match = nvme_re.match(dev)
         if not match:
             return False
-        nvme_name = match.group(1)
+        nvme_name = match[1]
         with open(f'/sys/class/nvme/{nvme_name}/model') as f:
             model = f.read().strip()
         if dev_type == 'ephemeral':
@@ -641,11 +614,11 @@ class aws_instance:
             if not self.__device_exists(self.__xenify(dev)):
                 continue
             self._disks[t] += [self.__xenify(dev)]
-        if not 'ebs' in self._disks:
+        if 'ebs' not in self._disks:
             self._disks['ebs'] = []
 
     def __mac_address(self, nic='eth0'):
-        with open('/sys/class/net/{}/address'.format(nic)) as f:
+        with open(f'/sys/class/net/{nic}/address') as f:
             return f.read().strip()
 
     def __init__(self):
@@ -674,9 +647,22 @@ class aws_instance:
         return self._type.split(".")[0]
 
     def is_supported_instance_class(self):
-        if self.instance_class() in ['i2', 'i3', 'i3en', 'c5d', 'm5d', 'm5ad', 'r5d', 'z1d', 'c6gd', 'm6gd', 'r6gd', 'x2gd', 'im4gn', 'is4gen']:
-            return True
-        return False
+        return self.instance_class() in [
+            'i2',
+            'i3',
+            'i3en',
+            'c5d',
+            'm5d',
+            'm5ad',
+            'r5d',
+            'z1d',
+            'c6gd',
+            'm6gd',
+            'r6gd',
+            'x2gd',
+            'im4gn',
+            'is4gen',
+        ]
 
     def get_en_interface_type(self):
         instance_class = self.instance_class()
@@ -686,10 +672,7 @@ class aws_instance:
         if instance_class in ['a1', 'c5', 'c5a', 'c5d', 'c5n', 'c6g', 'c6gd', 'f1', 'g3', 'g4', 'h1', 'i3', 'i3en', 'inf1', 'm5', 'm5a', 'm5ad', 'm5d', 'm5dn', 'm5n', 'm6g', 'm6gd', 'p2', 'p3', 'r4', 'r5', 'r5a', 'r5ad', 'r5b', 'r5d', 'r5dn', 'r5n', 't3', 't3a', 'u-6tb1', 'u-9tb1', 'u-12tb1', 'u-18tn1', 'u-24tb1', 'x1', 'x1e', 'z1d', 'c6g', 'c6gd', 'm6g', 'm6gd', 't4g', 'r6g', 'r6gd', 'x2gd', 'im4gn', 'is4gen']:
             return 'ena'
         if instance_class == 'm4':
-            if instance_size == '16xlarge':
-                return 'ena'
-            else:
-                return 'ixgbevf'
+            return 'ena' if instance_size == '16xlarge' else 'ixgbevf'
         return None
 
     def disks(self):
@@ -732,8 +715,8 @@ class aws_instance:
 
     def is_vpc_enabled(self, nic='eth0'):
         mac = self.__mac_address(nic)
-        mac_stat = self.__instance_metadata('network/interfaces/macs/{}'.format(mac))
-        return True if re.search(r'^vpc-id$', mac_stat, flags=re.MULTILINE) else False
+        mac_stat = self.__instance_metadata(f'network/interfaces/macs/{mac}')
+        return bool(re.search(r'^vpc-id$', mac_stat, flags=re.MULTILINE))
 
     @staticmethod
     def check():
@@ -745,21 +728,19 @@ class aws_instance:
 
     @property
     def user_data(self):
-        return curl(self.META_DATA_BASE_URL + "user-data")
+        return curl(f"{self.META_DATA_BASE_URL}user-data")
 
 
 def get_id_like():
     like = distro.like()
-    if not like:
-        return None
-    return like.split(' ')
+    return like.split(' ') if like else None
 
 def is_debian_variant():
-    d = get_id_like() if get_id_like() else distro.id()
+    d = get_id_like() or distro.id()
     return ('debian' in d)
 
 def is_redhat_variant():
-    d = get_id_like() if get_id_like() else distro.id()
+    d = get_id_like() or distro.id()
     return ('rhel' in d) or ('fedora' in d) or ('oracle') in d
 
 def is_gentoo():
@@ -772,7 +753,7 @@ def is_amzn2():
     return ('amzn' in distro.id()) and ('2' in distro.version())
 
 def is_suse_variant():
-    d = get_id_like() if get_id_like() else distro.id()
+    d = get_id_like() or distro.id()
     return ('suse' in d)
 
 def get_text_from_path(fpath):
@@ -782,10 +763,10 @@ def get_text_from_path(fpath):
     return ""
 
 def match_patterns_in_files(list_of_patterns_files):
-    for pattern, fpath in list_of_patterns_files:
-        if re.match(pattern, get_text_from_path(fpath), flags=re.IGNORECASE):
-            return True
-    return False
+    return any(
+        re.match(pattern, get_text_from_path(fpath), flags=re.IGNORECASE)
+        for pattern, fpath in list_of_patterns_files
+    )
 
 
 def is_ec2():
@@ -858,8 +839,7 @@ CONCOLORS = {'green': '\033[1;32m', 'red': '\033[1;31m', 'nocolor': '\033[0m'}
 
 
 def colorprint(msg, **kwargs):
-    fmt = dict(CONCOLORS)
-    fmt.update(kwargs)
+    fmt = dict(CONCOLORS) | kwargs
     print(msg.format(**fmt))
 
 
@@ -873,7 +853,7 @@ def parse_scylla_dirs_with_default(conf='/etc/scylla/scylla.yaml'):
             not " ".join(y['data_file_directories']).strip():
         y['data_file_directories'] = [os.path.join(y['workdir'], 'data')]
     for t in [ "commitlog", "hints", "view_hints", "saved_caches" ]:
-        key = "%s_directory" % t
+        key = f"{t}_directory"
         if key not in y or not y[key]:
             y[key] = os.path.join(y['workdir'], t)
     return y
@@ -899,14 +879,15 @@ def get_scylla_dirs():
 
 
 def perftune_base_command():
-    disk_tune_param = "--tune disks " + " ".join("--dir {}".format(d) for d in get_scylla_dirs())
-    return '/opt/scylladb/scripts/perftune.py {}'.format(disk_tune_param)
+    disk_tune_param = "--tune disks " + " ".join(
+        f"--dir {d}" for d in get_scylla_dirs()
+    )
+
+    return f'/opt/scylladb/scripts/perftune.py {disk_tune_param}'
 
 
 def is_valid_nic(nic):
-    if len(nic) == 0:
-        return False
-    return os.path.exists('/sys/class/net/{}'.format(nic))
+    return False if len(nic) == 0 else os.path.exists(f'/sys/class/net/{nic}')
 
 
 # Remove this when we do not support SET_NIC configuration value anymore
@@ -932,7 +913,7 @@ def get_set_nic_and_disks_config_value(cfg):
 
 def swap_exists():
     swaps = run('swapon --noheadings --raw', shell=True, check=True, capture_output=True, encoding='utf-8').stdout.strip()
-    return True if swaps != '' else False
+    return swaps != ''
 
 def pkg_error_exit(pkg):
     print(f'Package "{pkg}" required.')
@@ -1012,42 +993,73 @@ class SystemdException(Exception):
 
 class systemd_unit:
     def __init__(self, unit):
-        if is_nonroot():
-            self.ctlparam = '--user'
-        else:
-            self.ctlparam = ''
+        self.ctlparam = '--user' if is_nonroot() else ''
         try:
-            run('systemctl {} cat {}'.format(self.ctlparam, unit), shell=True, check=True, stdout=DEVNULL, stderr=DEVNULL)
+            run(
+                f'systemctl {self.ctlparam} cat {unit}',
+                shell=True,
+                check=True,
+                stdout=DEVNULL,
+                stderr=DEVNULL,
+            )
+
         except subprocess.CalledProcessError:
-            raise SystemdException('unit {} is not found or invalid'.format(unit))
+            raise SystemdException(f'unit {unit} is not found or invalid')
         self._unit = unit
 
     def __str__(self):
         return self._unit
 
     def start(self):
-        return run('systemctl {} start {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} start {self._unit}', shell=True, check=True
+        )
 
     def stop(self):
-        return run('systemctl {} stop {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} stop {self._unit}', shell=True, check=True
+        )
 
     def restart(self):
-        return run('systemctl {} restart {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} restart {self._unit}',
+            shell=True,
+            check=True,
+        )
 
     def enable(self):
-        return run('systemctl {} enable {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} enable {self._unit}',
+            shell=True,
+            check=True,
+        )
 
     def disable(self):
-        return run('systemctl {} disable {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} disable {self._unit}',
+            shell=True,
+            check=True,
+        )
 
     def is_active(self):
-        return run('systemctl {} is-active {}'.format(self.ctlparam, self._unit), shell=True, capture_output=True, encoding='utf-8').stdout.strip()
+        return run(
+            f'systemctl {self.ctlparam} is-active {self._unit}',
+            shell=True,
+            capture_output=True,
+            encoding='utf-8',
+        ).stdout.strip()
 
     def mask(self):
-        return run('systemctl {} mask {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} mask {self._unit}', shell=True, check=True
+        )
 
     def unmask(self):
-        return run('systemctl {} unmask {}'.format(self.ctlparam, self._unit), shell=True, check=True)
+        return run(
+            f'systemctl {self.ctlparam} unmask {self._unit}',
+            shell=True,
+            check=True,
+        )
 
     @classmethod
     def reload(cls):
@@ -1055,13 +1067,20 @@ class systemd_unit:
 
     @classmethod
     def available(cls, unit):
-        res = run('systemctl cat {}'.format(unit), shell=True, check=False, stdout=DEVNULL, stderr=DEVNULL)
+        res = run(
+            f'systemctl cat {unit}',
+            shell=True,
+            check=False,
+            stdout=DEVNULL,
+            stderr=DEVNULL,
+        )
+
         return res.returncode == 0
 
 
 class sysconfig_parser:
     def __load(self):
-        f = io.StringIO('[global]\n{}'.format(self._data))
+        f = io.StringIO(f'[global]\n{self._data}')
         self._cfg = configparser.ConfigParser()
         self._cfg.optionxform = str
         self._cfg.readfp(f)
@@ -1070,18 +1089,14 @@ class sysconfig_parser:
         return re.sub(r'"', r'\"', val)
 
     def __add(self, key, val):
-        self._data += '{}="{}"\n'.format(key, self.__escape(val))
+        self._data += f'{key}="{self.__escape(val)}"\n'
         self.__load()
 
     def __init__(self, filename):
-        if isinstance(filename, PurePath):
-            self._filename = str(filename)
-        else:
-            self._filename = filename
+        self._filename = str(filename) if isinstance(filename, PurePath) else filename
         if not os.path.exists(filename):
             open(filename, 'a').close()
-        with open(filename) as f:
-            self._data = f.read()
+        self._data = Path(filename).read_text()
         self.__load()
 
     def get(self, key):
@@ -1093,7 +1108,13 @@ class sysconfig_parser:
     def set(self, key, val):
         if not self.has_option(key):
             return self.__add(key, val)
-        self._data = re.sub('^{}=[^\n]*$'.format(key), '{}="{}"'.format(key, self.__escape(val)), self._data, flags=re.MULTILINE)
+        self._data = re.sub(
+            f'^{key}=[^\n]*$',
+            f'{key}="{self.__escape(val)}"',
+            self._data,
+            flags=re.MULTILINE,
+        )
+
         self.__load()
 
     def commit(self):

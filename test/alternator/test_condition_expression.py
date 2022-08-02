@@ -90,7 +90,19 @@ def test_condition_expression_attribute_updates(test_table_s):
 # with Expected, and becomes possible with ConditionExpression).
 def test_update_condition_eq_success(test_table_s):
     p = random_string()
-    values = (1, "hello", True, b'xyz', None, ['hello', 42], {'hello': 'world'}, set(['hello', 'world']), set([1, 2, 3]), set([b'xyz', b'hi']))
+    values = (
+        1,
+        "hello",
+        True,
+        b'xyz',
+        None,
+        ['hello', 42],
+        {'hello': 'world'},
+        {'hello', 'world'},
+        {1, 2, 3},
+        {b'xyz', b'hi'},
+    )
+
     i = 0
     for val in values:
         i = i + 1
@@ -113,15 +125,32 @@ def test_update_condition_eq_success(test_table_s):
 # combination of different types.
 def test_update_condition_eq_different(test_table_s):
     p = random_string()
-    values = (1, "hello", True, b'xyz', None, ['hello', 42], {'hello': 'world'}, set(['hello', 'world']), set([1, 2, 3]), set([b'xyz', b'hi']))
+    values = (
+        1,
+        "hello",
+        True,
+        b'xyz',
+        None,
+        ['hello', 42],
+        {'hello': 'world'},
+        {'hello', 'world'},
+        {1, 2, 3},
+        {b'xyz', b'hi'},
+    )
+
     for val1 in values:
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Value': val1, 'Action': 'PUT'}})
         for val2 in values:
-            print('testing {} {}'.format(val1, val2))
+            print(f'testing {val1} {val2}')
             # Frustratingly, Python considers True == 1, so we have to use
             # this ugly expression instead of the trivial val1 == val2
-            if (val1 is True and val2 is True) or (not val1 is True and not val2 is True and val1 == val2):
+            if (
+                (val1 is True and val2 is True)
+                or val1 is not True
+                and val2 is not True
+                and val1 == val2
+            ):
                 # Condition should succeed
                 test_table_s.update_item(Key={'p': p},
                     UpdateExpression='SET a = :val1',
@@ -182,18 +211,35 @@ def test_update_condition_eq_set(test_table_s):
     p = random_string()
     # Because boto3 sorts the set values we give it, in order to generate a
     # set with a different order, we need to build it incrementally.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': set(['dog', 'chinchilla']), 'Action': 'PUT'}})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': {'dog', 'chinchilla'}, 'Action': 'PUT'}
+        },
+    )
+
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD a :val1',
-        ExpressionAttributeValues={':val1': set(['cat', 'mouse'])})
+        ExpressionAttributeValues={':val1': {'cat', 'mouse'}},
+    )
+
     # Sanity check - the attribute contains the set we think it does
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['chinchilla', 'cat', 'dog', 'mouse'])
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'chinchilla', 'cat', 'dog', 'mouse'}
+
     # Now finally check that condition expression check knows the equality too.
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='SET b = :val1',
         ConditionExpression='a = :oldval',
-        ExpressionAttributeValues={':val1': 3, ':oldval': set(['chinchilla', 'cat', 'dog', 'mouse'])})
+        ExpressionAttributeValues={
+            ':val1': 3,
+            ':oldval': {'chinchilla', 'cat', 'dog', 'mouse'},
+        },
+    )
+
     assert 'b' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
 
 # The above test (test_update_condition_eq_set()) checked equality of simple
@@ -206,13 +252,33 @@ def test_update_condition_eq_nested_set(test_table_s):
     p = random_string()
     # Because boto3 sorts the set values we give it, in order to generate a
     # set with a different order, we need to build it incrementally.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': {'b': 'c', 'd': ['e', 'f', set(['g', 'h'])], 'i': set(['j', 'k'])}, 'Action': 'PUT'}})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {
+                'Value': {
+                    'b': 'c',
+                    'd': ['e', 'f', {'g', 'h'}],
+                    'i': {'j', 'k'},
+                },
+                'Action': 'PUT',
+            }
+        },
+    )
+
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD a.d[2] :val1, a.i :val2',
-        ExpressionAttributeValues={':val1': set(['l', 'm']), ':val2': set(['n', 'o'])})
+        ExpressionAttributeValues={':val1': {'l', 'm'}, ':val2': {'n', 'o'}},
+    )
+
     # Sanity check - the attribute contains the set we think it does
-    expected = {'b': 'c', 'd': ['e', 'f', set(['g', 'h', 'l', 'm'])], 'i': set(['j', 'k', 'n', 'o'])}
+    expected = {
+        'b': 'c',
+        'd': ['e', 'f', {'g', 'h', 'l', 'm'}],
+        'i': {'j', 'k', 'n', 'o'},
+    }
+
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == expected
     # Now finally check that condition expression check knows the equality too.
     test_table_s.update_item(Key={'p': p},
@@ -221,7 +287,12 @@ def test_update_condition_eq_nested_set(test_table_s):
         ExpressionAttributeValues={':val1': 3, ':oldval': expected})
     assert 'b' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
     # Check that equality can also fail, if the inner set differs
-    wrong = {'b': 'c', 'd': ['e', 'f', set(['g', 'h', 'l', 'bad'])], 'i': set(['j', 'k', 'n', 'o'])}
+    wrong = {
+        'b': 'c',
+        'd': ['e', 'f', {'g', 'h', 'l', 'bad'}],
+        'i': {'j', 'k', 'n', 'o'},
+    }
+
     with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='SET b = :val1',
@@ -276,25 +347,48 @@ def test_update_condition_ne_set(test_table_s):
     p = random_string()
     # Because boto3 sorts the set values we give it, in order to generate a
     # set with a different order, we need to build it incrementally.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': set(['dog', 'chinchilla']), 'Action': 'PUT'}})
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': {'dog', 'chinchilla'}, 'Action': 'PUT'}
+        },
+    )
+
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='ADD a :val1',
-        ExpressionAttributeValues={':val1': set(['cat', 'mouse'])})
+        ExpressionAttributeValues={':val1': {'cat', 'mouse'}},
+    )
+
     # Sanity check - the attribute contains the set we think it does
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['a'] == set(['chinchilla', 'cat', 'dog', 'mouse'])
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'][
+        'a'
+    ] == {'chinchilla', 'cat', 'dog', 'mouse'}
+
     # Now check that condition expression check knows there is no inequality
     # here.
     with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             UpdateExpression='SET b = :val1',
             ConditionExpression='a <> :oldval',
-            ExpressionAttributeValues={':val1': 2, ':oldval': set(['chinchilla', 'cat', 'dog', 'mouse'])})
+            ExpressionAttributeValues={
+                ':val1': 2,
+                ':oldval': {'chinchilla', 'cat', 'dog', 'mouse'},
+            },
+        )
+
     # As a sanity check, also check something which should be unequal:
-    test_table_s.update_item(Key={'p': p},
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='SET b = :val1',
         ConditionExpression='a <> :oldval',
-        ExpressionAttributeValues={':val1': 3, ':oldval': set(['chinchilla', 'cat', 'dog', 'horse'])})
+        ExpressionAttributeValues={
+            ':val1': 3,
+            ':oldval': {'chinchilla', 'cat', 'dog', 'horse'},
+        },
+    )
+
     assert 'b' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']
 
 # In test_update_condition_ne() above we saw that a non-existent attribute is
@@ -433,10 +527,13 @@ def test_update_condition_comparison_two_unset(test_table_s):
     ops = ['<', '<=', '>', '>=']
     for op in ops:
         with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
-            test_table_s.update_item(Key={'p': p},
+            test_table_s.update_item(
+                Key={'p': p},
                 UpdateExpression='SET a = :val1',
-                ConditionExpression='q ' + op + ' z',
-                ExpressionAttributeValues={':val1': 2})
+                ConditionExpression=f'q {op} z',
+                ExpressionAttributeValues={':val1': 2},
+            )
+
     with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='SET a = :val1',
@@ -446,10 +543,13 @@ def test_update_condition_comparison_two_unset(test_table_s):
         AttributeUpdates={'a': {'Value': 1, 'Action': 'PUT'}})
     for op in ops:
         with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
-            test_table_s.update_item(Key={'p': p},
+            test_table_s.update_item(
+                Key={'p': p},
                 UpdateExpression='SET a = :val1',
-                ConditionExpression='q ' + op + ' z',
-                ExpressionAttributeValues={':val1': 3})
+                ConditionExpression=f'q {op} z',
+                ExpressionAttributeValues={':val1': 3},
+            )
+
     with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
         test_table_s.update_item(Key={'p': p},
             UpdateExpression='SET a = :val1',
@@ -899,10 +999,22 @@ def test_update_condition_between(test_table_s):
 # be supported, according to the DynamoDB documentation).
 def test_update_condition_in(test_table_s):
     p = random_string()
-    
+
     # The "IN" operator checks equality, and should work for any type.
     # Here we just try the trivial successful equality check of one value:
-    values = (1, "hello", True, b'xyz', None, ['hello', 42], {'hello': 'world'}, set(['hello', 'world']), set([1, 2, 3]), set([b'xyz', b'hi']))
+    values = (
+        1,
+        "hello",
+        True,
+        b'xyz',
+        None,
+        ['hello', 42],
+        {'hello': 'world'},
+        {'hello', 'world'},
+        {1, 2, 3},
+        {b'xyz', b'hi'},
+    )
+
     i = 0
     for val in values:
         i = i + 1
@@ -921,19 +1033,25 @@ def test_update_condition_in(test_table_s):
     # the first argument to the operator), so let's check 99 work.
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'a': {'Value': 74, 'Action': 'PUT'}})
-    values = {':val{}'.format(i): i for i in range(99)}
-    test_table_s.update_item(Key={'p': p},
+    values = {f':val{i}': i for i in range(99)}
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='SET c = :val37',
-        ConditionExpression='a IN ({})'.format(','.join(values.keys())),
-        ExpressionAttributeValues=values)
+        ConditionExpression=f"a IN ({','.join(values.keys())})",
+        ExpressionAttributeValues=values,
+    )
+
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['c'] == 37
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'a': {'Value': 174, 'Action': 'PUT'}})
     with pytest.raises(ClientError, match='ConditionalCheckFailedException.*'):
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             UpdateExpression='SET c = :val37',
-            ConditionExpression='a IN ({})'.format(','.join(values.keys())),
-            ExpressionAttributeValues=values)
+            ConditionExpression=f"a IN ({','.join(values.keys())})",
+            ExpressionAttributeValues=values,
+        )
+
     # Unlike the IN operation in Expected, here it is not a validation error
     # for the different values to have different types (of course, the
     # condition will only end up succeeding if one of the listed values has
@@ -952,10 +1070,12 @@ def test_update_condition_in(test_table_s):
     # If the attribute being compared doesn't even exist, this is also
     # considered as a false condition - not an error.
     with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             UpdateExpression='SET c = :val37',
-            ConditionExpression='q IN ({})'.format(','.join(values.keys())),
-            ExpressionAttributeValues=values)
+            ConditionExpression=f"q IN ({','.join(values.keys())})",
+            ExpressionAttributeValues=values,
+        )
 
 # Beyond the above operators, there are also test functions supported -
 # attribute_exists, attribute_not_exists, attribute_type, begins_with,
@@ -1024,16 +1144,22 @@ def test_update_condition_attribute_type(test_table_s):
     p = random_string()
     type_values = [
         ('S', 'hello'),
-        ('SS', set(['hello', 'world'])),
+        ('SS', {'hello', 'world'}),
         ('N', 2),
-        ('NS', set([1, 2])),
+        ('NS', {1, 2}),
         ('B', b'dog'),
-        ('BS', set([b'dog', b'cat'])),
+        ('BS', {b'dog', b'cat'}),
         ('BOOL', True),
         ('NULL', None),
         ('L', [1, 'dog']),
-        ('M', {'a': 3, 'b': 4})]
-    updates={'a{}'.format(i): {'Value': type_values[i][1], 'Action': 'PUT'} for i in range(len(type_values))}
+        ('M', {'a': 3, 'b': 4}),
+    ]
+
+    updates = {
+        f'a{i}': {'Value': type_values[i][1], 'Action': 'PUT'}
+        for i in range(len(type_values))
+    }
+
     test_table_s.update_item(Key={'p': p}, AttributeUpdates=updates)
     for i in range(len(type_values)):
         expected_type = type_values[i][0]
@@ -1041,17 +1167,23 @@ def test_update_condition_attribute_type(test_table_s):
         # cannot be tested with Python 2
         if expected_type in ('B', 'BS') and version_info[0] == 2:
             continue
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             UpdateExpression='SET c = :val',
-            ConditionExpression='attribute_type (a{}, :type)'.format(i),
-            ExpressionAttributeValues={':val': i, ':type': expected_type})
+            ConditionExpression=f'attribute_type (a{i}, :type)',
+            ExpressionAttributeValues={':val': i, ':type': expected_type},
+        )
+
         assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['c'] == i
         wrong_type = type_values[(i + 1) % len(type_values)][0]
         with pytest.raises(ClientError, match='ConditionalCheckFailedException.*'):
-            test_table_s.update_item(Key={'p': p},
+            test_table_s.update_item(
+                Key={'p': p},
                 UpdateExpression='SET c = :val',
-                ConditionExpression='attribute_type (a{}, :type)'.format(i),
-                ExpressionAttributeValues={':val': i, ':type': wrong_type})
+                ConditionExpression=f'attribute_type (a{i}, :type)',
+                ExpressionAttributeValues={':val': i, ':type': wrong_type},
+            )
+
     # The DynamoDB documentation suggests that attribute_type()'s first
     # parameter must be a path (as we saw above, this is indeed the case for
     # attribute_exists()). But in fact, attribute_type() does work fine also
@@ -1157,12 +1289,17 @@ def test_update_condition_contains(test_table_s):
     # string or binary) and membership (in set or a list). The DynamoDB
     # documentation only mention string and set (not binary or list) but
     # the fact is that binary and list are also support.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': 'hello', 'Action': 'PUT'},
-                          'b': {'Value': set([2, 4, 7]), 'Action': 'PUT'},
-                          'c': {'Value': [2, 4, 7], 'Action': 'PUT'},
-                          'd': {'Value': b'hi there', 'Action': 'PUT'},
-                          'e': {'Value': ['hi', set([1,2]), [3, 4]], 'Action': 'PUT'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': 'hello', 'Action': 'PUT'},
+            'b': {'Value': {2, 4, 7}, 'Action': 'PUT'},
+            'c': {'Value': [2, 4, 7], 'Action': 'PUT'},
+            'd': {'Value': b'hi there', 'Action': 'PUT'},
+            'e': {'Value': ['hi', {1, 2}, [3, 4]], 'Action': 'PUT'},
+        },
+    )
+
     test_table_s.update_item(Key={'p': p},
         UpdateExpression='SET z = :val',
             ConditionExpression='contains(a, :arg)',
@@ -1195,14 +1332,20 @@ def test_update_condition_contains(test_table_s):
     # contains checks if perhaps the first parameter is a list or a set
     # containing that value!
     with pytest.raises(ClientError, match='ConditionalCheckFailedException'):
-        test_table_s.update_item(Key={'p': p},
+        test_table_s.update_item(
+            Key={'p': p},
             UpdateExpression='SET z = :val',
-                ConditionExpression='contains(d, :arg)',
-                ExpressionAttributeValues={':val': 4, ':arg': set([1, 2])})
-    test_table_s.update_item(Key={'p': p},
+            ConditionExpression='contains(d, :arg)',
+            ExpressionAttributeValues={':val': 4, ':arg': {1, 2}},
+        )
+
+    test_table_s.update_item(
+        Key={'p': p},
         UpdateExpression='SET z = :val',
         ConditionExpression='contains(e, :arg)',
-        ExpressionAttributeValues={':val': 5, ':arg': set([1, 2])})
+        ExpressionAttributeValues={':val': 5, ':arg': {1, 2}},
+    )
+
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item']['z'] == 5
     test_table_s.update_item(Key={'p': p},
         UpdateExpression='SET z = :val',
@@ -1243,15 +1386,20 @@ def test_update_condition_size(test_table_s):
     p = random_string()
     # First verify what size() returns for various types. We use only the
     # "=" comparison for these tests:
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Value': 'hello', 'Action': 'PUT'},
-                          'b': {'Value': set([2, 4, 7]), 'Action': 'PUT'},
-                          'c': {'Value': [2, 'dog', 7], 'Action': 'PUT'},
-                          'd': {'Value': b'hi there', 'Action': 'PUT'},
-                          'e': {'Value': {'x': 2, 'y': {'m': 3, 'n': 4}}, 'Action': 'PUT'},
-                          'f': {'Value': 5, 'Action': 'PUT'},
-                          'g': {'Value': True, 'Action': 'PUT'},
-                          'h': {'Value': None, 'Action': 'PUT'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={
+            'a': {'Value': 'hello', 'Action': 'PUT'},
+            'b': {'Value': {2, 4, 7}, 'Action': 'PUT'},
+            'c': {'Value': [2, 'dog', 7], 'Action': 'PUT'},
+            'd': {'Value': b'hi there', 'Action': 'PUT'},
+            'e': {'Value': {'x': 2, 'y': {'m': 3, 'n': 4}}, 'Action': 'PUT'},
+            'f': {'Value': 5, 'Action': 'PUT'},
+            'g': {'Value': True, 'Action': 'PUT'},
+            'h': {'Value': None, 'Action': 'PUT'},
+        },
+    )
+
     test_table_s.update_item(Key={'p': p},
         UpdateExpression='SET z = :val',
             ConditionExpression='size(a)=:arg',
@@ -1626,7 +1774,7 @@ def test_delete_item_condition(test_table_s):
     test_table_s.delete_item(Key={'p': p},
             ConditionExpression='a = :oldval',
             ExpressionAttributeValues={':oldval': 1})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
 
 def test_put_item_condition(test_table_s):
     p = random_string()
@@ -1820,7 +1968,7 @@ def test_condition_expression_unsigned_bytes(test_table_s):
 # by using a "<>" (not equal) condition.
 def test_update_item_condition_key_ne(test_table_s):
     p = random_string()
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     # Create an empty item with key p, but only if no item with p exists yet.
     # Note how when the item does not exist, the <> (not equal) test succeeds
     # (we already tested that in test_update_condition_ne())
@@ -1841,7 +1989,7 @@ def test_update_item_condition_key_ne(test_table_s):
 # above.
 def test_update_item_condition_key_attribute_not_exists(test_table_s):
     p = random_string()
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     # Create an empty item with key p, but only an item with p exists yet.
     # Note how when the item does not exist, attribute_not_exists() succeeds
     test_table_s.update_item(Key={'p': p},

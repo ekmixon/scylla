@@ -123,7 +123,7 @@ def generate_coverage_report(path="build/coverage/test", name="tests", input_fil
             print(msg)
 
     if input_files:
-        maybe_print(f"Using input_files as input for the report")
+        maybe_print("Using input_files as input for the report")
         profraw_files = input_files
         for file in profraw_files:
             dirname, basename = os.path.split(file)
@@ -131,16 +131,16 @@ def generate_coverage_report(path="build/coverage/test", name="tests", input_fil
             if match is None:
                 print(f"Error: input file {input_file} doesn't match the expected input file naming pattern {input_file_re_str}, skipping it")
 
-            test_executables.append(os.path.join(dirname, match.group(1)))
+            test_executables.append(os.path.join(dirname, match[1]))
     else:
         maybe_print(f"Scanning {path} for input files matching {input_file_re_str}")
         profraw_files = []
         for root, dirs, files in os.walk(path):
             for file in files:
                 match = re.fullmatch(input_file_re, file)
-                if not match is None:
+                if match is not None:
                     profraw_files.append(os.path.join(root, file))
-                    test_executables.append(os.path.join(root, match.group(1)))
+                    test_executables.append(os.path.join(root, match[1]))
         maybe_print(f"Found {len(profraw_files)} input files")
 
     if not profraw_files:
@@ -165,10 +165,7 @@ def generate_coverage_report(path="build/coverage/test", name="tests", input_fil
     html_report_url = os.path.abspath(os.path.join(html_report_path, "index.html"))
 
     maybe_print(f"Generating html report in {html_report_path}")
-    if verbose > 1:
-        genhtml_cmd = ["genhtml"]
-    else:
-        genhtml_cmd = ["genhtml", "-q"]
+    genhtml_cmd = ["genhtml"] if verbose > 1 else ["genhtml", "-q"]
     subprocess.check_call(genhtml_cmd + ["-o", html_report_path, info_path])
 
     print(f"Coverage report written to {html_report_path}, url: file://{html_report_url}")

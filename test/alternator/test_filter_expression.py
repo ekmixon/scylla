@@ -43,25 +43,23 @@ def random_s():
 def random_b():
     return random_bytes(length=random.randint(7,15))
 def random_l():
-    return [random_i() for i in range(random.randint(1,3))]
+    return [random_i() for _ in range(random.randint(1,3))]
 def random_m():
     return {random_s(): random_i() for i in range(random.randint(1,3))}
 def random_set():
-    return set([random_i() for i in range(random.randint(1,3))])
+    return {random_i() for _ in range(random.randint(1,3))}
 def random_sets():
-    return set([random_s() for i in range(random.randint(1,3))])
+    return {random_s() for _ in range(random.randint(1,3))}
 def random_bool():
     return bool(random.randint(0,1))
 def random_item(p, i):
     item = {'p': p, 'c': i, 's': random_s(), 'b': random_b(), 'i': random_i(),
             'l': random_l(), 'm': random_m(), 'ns': random_set(), 'ss': random_sets(), 'bool': random_bool() }
     # The "r" attribute doesn't appears on all items, and when it does it has a random type
-    if i == 0:
-        # Ensure that the first item always has an 'r' value.
-        t = random.randint(1,4)
-    else:
-        t = random.randint(0,4)
-    if t == 1:
+    t = random.randint(1,4) if i == 0 else random.randint(0,4)
+    if t == 0:
+        item['j'] = item['i']
+    elif t == 1:
         item['r'] = random_i()
     elif t == 2:
         item['r'] = random_s()
@@ -69,9 +67,6 @@ def random_item(p, i):
         item['r'] = random_b()
     elif t == 4:
         item['r'] = [random_i(), random_i()]   # a list
-    # Some of the items have j=i, others don't
-    if t == 0:
-        item['j'] = item['i']
     return item
 @pytest.fixture(scope="module")
 def test_table_sn_with_data(test_table_sn):
@@ -113,8 +108,13 @@ def test_filter_expression_eq(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b', 'l', 'm', 'ns', 'bool']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+'=:xv'),
-            ExpressionAttributeValues={':p': p, ':xv': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn}=:xv',
+            ExpressionAttributeValues={':p': p, ':xv': xv},
+        )
+
         expected_items = [item for item in items if item[xn] == xv]
         assert(got_items == expected_items)
 
@@ -159,8 +159,13 @@ def test_filter_expression_neq(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+'<>:xv'),
-            ExpressionAttributeValues={':p': p, ':xv': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn}<>:xv',
+            ExpressionAttributeValues={':p': p, ':xv': xv},
+        )
+
         expected_items = [item for item in items if item[xn] != xv]
         assert(got_items == expected_items)
 
@@ -173,7 +178,7 @@ def test_filter_expression_r_neq(test_table_sn_with_data):
     r = items[0]['r']
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='r<>:r',
         ExpressionAttributeValues={':p': p, ':r': r})
-    expected_items = [item for item in items if not 'r' in item or item['r'] != r]
+    expected_items = [item for item in items if 'r' not in item or item['r'] != r]
     assert(got_items == expected_items)
 
 # Test the "<" operator on a numeric, string and bytes attributes:
@@ -181,8 +186,13 @@ def test_filter_expression_lt(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+'<:xv'),
-            ExpressionAttributeValues={':p': p, ':xv': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn}<:xv',
+            ExpressionAttributeValues={':p': p, ':xv': xv},
+        )
+
         expected_items = [item for item in items if item[xn] < xv]
         assert(got_items == expected_items)
 
@@ -210,8 +220,13 @@ def test_filter_expression_le(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+'<=:xv'),
-            ExpressionAttributeValues={':p': p, ':xv': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn}<=:xv',
+            ExpressionAttributeValues={':p': p, ':xv': xv},
+        )
+
         expected_items = [item for item in items if item[xn] <= xv]
         assert(got_items == expected_items)
 
@@ -220,8 +235,13 @@ def test_filter_expression_gt(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+'>:xv'),
-            ExpressionAttributeValues={':p': p, ':xv': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn}>:xv',
+            ExpressionAttributeValues={':p': p, ':xv': xv},
+        )
+
         expected_items = [item for item in items if item[xn] > xv]
         assert(got_items == expected_items)
 
@@ -230,8 +250,13 @@ def test_filter_expression_ge(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 's', 'b']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+'>=:xv'),
-            ExpressionAttributeValues={':p': p, ':xv': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn}>=:xv',
+            ExpressionAttributeValues={':p': p, ':xv': xv},
+        )
+
         expected_items = [item for item in items if item[xn] >= xv]
         assert(got_items == expected_items)
 
@@ -268,8 +293,13 @@ def test_filter_expression_between(test_table_sn_with_data):
         xv2 = items[3][xn]
         if xv1 > xv2:
             xv1, xv2 = xv2, xv1
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+' BetWEeN :xv1 AnD :xv2'),
-            ExpressionAttributeValues={':p': p, ':xv1': xv1, ':xv2': xv2})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn} BetWEeN :xv1 AnD :xv2',
+            ExpressionAttributeValues={':p': p, ':xv1': xv1, ':xv2': xv2},
+        )
+
         expected_items = [item for item in items if item[xn] >= xv1 and item[xn] <= xv2]
         assert(got_items == expected_items)
 
@@ -293,9 +323,19 @@ def test_filter_expression_in(test_table_sn_with_data):
         xv1 = items[2][xn]
         xv2 = items[7][xn]
         xv3 = items[4][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression=(xn+' In (:xv1, :xv2, :xv3)'),
-            ExpressionAttributeValues={':p': p, ':xv1': xv1, ':xv2': xv2, ':xv3': xv3})
-        expected_items = [item for item in items if item[xn] == xv1 or item[xn] == xv2 or item[xn] == xv3]
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'{xn} In (:xv1, :xv2, :xv3)',
+            ExpressionAttributeValues={
+                ':p': p,
+                ':xv1': xv1,
+                ':xv2': xv2,
+                ':xv3': xv3,
+            },
+        )
+
+        expected_items = [item for item in items if item[xn] in [xv1, xv2, xv3]]
         assert(got_items == expected_items)
 
 # The begins_with function does *not* work on a numeric attributes - it only
@@ -309,7 +349,7 @@ def test_filter_expression_num_begins(test_table_sn_with_data):
 
 def test_filter_expression_string_begins(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
-    start = items[2]['s'][0:2]
+    start = items[2]['s'][:2]
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='begins_with(s, :start)',
         ExpressionAttributeValues={':p': p, ':start': start})
     expected_items = [item for item in items if item['s'].startswith(start)]
@@ -317,7 +357,7 @@ def test_filter_expression_string_begins(test_table_sn_with_data):
 
 def test_filter_expression_bytes_begins(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
-    start = items[2]['b'][0:2]
+    start = items[2]['b'][:2]
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='begins_with(b, :start)',
         ExpressionAttributeValues={':p': p, ':start': start})
     expected_items = [item for item in items if item['b'].startswith(start)]
@@ -342,8 +382,13 @@ def test_filter_expression_num_contains(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['ns', 'l']:
         xv = next(iter(items[2][xn]))
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='contains('+xn+', :i)',
-        ExpressionAttributeValues={':p': p, ':i': xv})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'contains({xn}, :i)',
+            ExpressionAttributeValues={':p': p, ':i': xv},
+        )
+
         expected_items = [item for item in items if xv in item[xn]]
         assert(got_items == expected_items)
 
@@ -431,7 +476,7 @@ def test_filter_expression_r_not_exists(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='attribute_not_exists(r)',
         ExpressionAttributeValues={':p': p})
-    expected_items = [item for item in items if not 'r' in item]
+    expected_items = [item for item in items if 'r' not in item]
     assert(got_items == expected_items)
 
 # Test the attribute_type(), which should support all types:
@@ -515,7 +560,7 @@ def test_filter_expression_string_size(test_table_sn_with_data):
     assert(got_items == expected_items)
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='size(s) IN (:i1, :i2)',
         ExpressionAttributeValues={':p': p, ':i1': len1, ':i2': len2})
-    expected_items = [item for item in items if len(item['s']) == len1 or len(item['s']) == len2]
+    expected_items = [item for item in items if len(item['s']) in [len1, len2]]
     assert(got_items == expected_items)
 
 def test_filter_expression_bytes_size(test_table_sn_with_data):
@@ -533,8 +578,13 @@ def test_filter_expression_collection_size(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['l', 'm', 'ns']:
         xv = items[2][xn]
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='size('+xn+') = :len',
-        ExpressionAttributeValues={':p': p, ':len': len(xv)})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'size({xn}) = :len',
+            ExpressionAttributeValues={':p': p, ':len': len(xv)},
+        )
+
         expected_items = [item for item in items if len(item[xn]) == len(xv)]
         assert(got_items == expected_items)
     # We don't test here the other operators (>, >= etc.), it's enough to test
@@ -545,11 +595,21 @@ def test_filter_expression_collection_size(test_table_sn_with_data):
 def test_filter_expression_num_size(test_table_sn_with_data):
     table, p, items = test_table_sn_with_data
     for xn in ['i', 'bool']:
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='size('+xn+') < :i',
-            ExpressionAttributeValues={':p': p, ':i': 3})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'size({xn}) < :i',
+            ExpressionAttributeValues={':p': p, ':i': 3},
+        )
+
         assert(got_items == [])
-        got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='size('+xn+') >= :i',
-            ExpressionAttributeValues={':p': p, ':i': 3})
+        got_items = full_query(
+            table,
+            KeyConditionExpression='p=:p',
+            FilterExpression=f'size({xn}) >= :i',
+            ExpressionAttributeValues={':p': p, ':i': 3},
+        )
+
         assert(got_items == [])
 
 # Unknown functions like dog() results in errors
@@ -572,7 +632,7 @@ def test_filter_expression_or(test_table_sn_with_data):
     i3 = items[7]['i']
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='i=:i1 OR i=:i2 oR i=:i3',
             ExpressionAttributeValues={':p': p, ':i1': i1, ':i2': i2, ':i3': i3})
-    expected_items = [item for item in items if item['i'] == i1 or item['i'] == i2 or item['i'] == i3]
+    expected_items = [item for item in items if item['i'] in [i1, i2, i3]]
     assert(got_items == expected_items)
 
 def test_filter_expression_and(test_table_sn_with_data):
@@ -603,7 +663,7 @@ def test_filter_expression_precedence(test_table_sn_with_data):
     i2 = items[5]['i']
     got_items = full_query(table, KeyConditionExpression='p=:p', FilterExpression='i=:i2 OR i=:i1 AND s=:s1',
             ExpressionAttributeValues={':p': p, ':i1': i1, ':s1': s1, ':i2': i2})
-    expected_items = [item for item in items if item['i'] == i1 or item['i'] == i2]
+    expected_items = [item for item in items if item['i'] in [i1, i2]]
     assert(got_items == expected_items)
 
 # A simple case of syntax error - unknown operator "!=".

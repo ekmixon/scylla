@@ -27,5 +27,5 @@ from scylla_util import *
 if __name__ == '__main__':
     log = scylladir_p() / 'scylla-server.log'
     if log.exists() and log.stat().st_size > 0:
-        dt = datetime.today().isoformat()
+        dt = datetime.now().isoformat()
         log.rename(scylladir_p() / f'scylla-server.log.{dt}')

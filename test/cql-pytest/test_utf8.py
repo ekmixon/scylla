@@ -31,10 +31,10 @@ from util import unique_name, random_string
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (k text, c text, primary key (k, c))")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # Demonstrate that Scylla, like Cassandra, does NOT support the notion of
 # "Unicode equivalence" (a.k.a. Unicode normalization). Consider the Spanish
@@ -60,12 +60,12 @@ def test_unicode_equivalence(cql, table1):
     # work.
     cql.execute(insert, [s, u1])
     assert len(list(cql.execute(search, [s, u1]))) == 1
-    assert len(list(cql.execute(search, [s, u2]))) == 0
+    assert not list(cql.execute(search, [s, u2]))
     # Test that writing u1 as a *partition key* and looking up u2 will not
     # work.
     cql.execute(insert, [u1, s])
     assert len(list(cql.execute(search, [u1, s]))) == 1
-    assert len(list(cql.execute(search, [u2, s]))) == 0
+    assert not list(cql.execute(search, [u2, s]))
 
 # Demonstrate that the LIKE operation is also not aware of Unicode
 # equivalence: a 'n%' pattern can match one representation of ñ but not
@@ -84,10 +84,10 @@ def test_unicode_equivalence_like(scylla_only, cql, table1):
     s = random_string()
     # u1 does not match the pattern 'n%':
     cql.execute(insert, [s, u1])
-    assert set(cql.execute(search, [s, 'n%'])) == set()
+    assert not set(cql.execute(search, [s, 'n%']))
     # u1 matches the pattern '_' (a single character though not a single byte)
-    assert set(cql.execute(search, [s, '_'])) == set([(s, u1)])
+    assert set(cql.execute(search, [s, '_'])) == {(s, u1)}
     # but u2 does match 'n%', but not '_':
     cql.execute(insert, [s, u2])
-    assert set(cql.execute(search, [s, 'n%'])) == set([(s, u2)])
-    assert set(cql.execute(search, [s, '_'])) == set([(s, u1)])
+    assert set(cql.execute(search, [s, 'n%'])) == {(s, u2)}
+    assert set(cql.execute(search, [s, '_'])) == {(s, u1)}

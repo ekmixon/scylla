@@ -33,7 +33,7 @@ def test_trivial_returnvalues(test_table_s):
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.put_item(Item={'p': p, 'a': 'hello'}, ReturnValues='NONE')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     with pytest.raises(ClientError, match='ValidationException'):
         test_table_s.put_item(Item={'p': p, 'a': 'hello'}, ReturnValues='DOG')
     # UpdateItem:
@@ -42,7 +42,7 @@ def test_trivial_returnvalues(test_table_s):
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='NONE',
         UpdateExpression='SET b = :val',
         ExpressionAttributeValues={':val': 'cat'})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     with pytest.raises(ClientError, match='ValidationException'):
         test_table_s.update_item(Key={'p': p}, ReturnValues='DOG',
             UpdateExpression='SET a = a + :val',
@@ -51,7 +51,7 @@ def test_trivial_returnvalues(test_table_s):
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.delete_item(Key={'p': p}, ReturnValues='NONE')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     with pytest.raises(ClientError, match='ValidationException'):
         test_table_s.delete_item(Key={'p': p}, ReturnValues='DOG')
 
@@ -63,12 +63,12 @@ def test_put_item_returnvalues(test_table_s):
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.put_item(Item={'p': p, 'a': 'hello'})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # Using ReturnValues=NONE is the same:
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.put_item(Item={'p': p, 'a': 'hello'}, ReturnValues='NONE')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # With ReturnValues=ALL_OLD, the old value of the item is returned
     # in an "Attributes" attribute:
     p = random_string()
@@ -79,7 +79,7 @@ def test_put_item_returnvalues(test_table_s):
     # at all:
     p = random_string()
     ret=test_table_s.put_item(Item={'p': p, 'a': 'hello'}, ReturnValues='ALL_OLD')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # Other ReturnValue options - UPDATED_OLD, ALL_NEW, UPDATED_NEW,
     # are supported by other operations but not by PutItem:
     with pytest.raises(ClientError, match='ValidationException'):
@@ -104,12 +104,12 @@ def test_delete_item_returnvalues(test_table_s):
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.delete_item(Key={'p': p})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # Using ReturnValues=NONE is the same:
     p = random_string()
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.delete_item(Key={'p': p}, ReturnValues='NONE')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # With ReturnValues=ALL_OLD, the old value of the item is returned
     # in an "Attributes" attribute:
     p = random_string()
@@ -120,7 +120,7 @@ def test_delete_item_returnvalues(test_table_s):
     # at all:
     p = random_string()
     ret=test_table_s.delete_item(Key={'p': p}, ReturnValues='ALL_OLD')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # Other ReturnValue options - UPDATED_OLD, ALL_NEW, UPDATED_NEW,
     # are supported by other operations but not by PutItem:
     with pytest.raises(ClientError, match='ValidationException'):
@@ -150,7 +150,7 @@ def test_update_item_returnvalues_none(test_table_s):
     ret=test_table_s.update_item(Key={'p': p},
         UpdateExpression='SET b = :val',
         ExpressionAttributeValues={':val': 'cat'})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
     # Using ReturnValues=NONE is the same:
     p = random_string()
@@ -158,7 +158,7 @@ def test_update_item_returnvalues_none(test_table_s):
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='NONE',
         UpdateExpression='SET b = :val',
         ExpressionAttributeValues={':val': 'cat'})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
     # The ReturnValues value is case sensitive, so while "NONE" is supported
     # (and tested above), "none" isn't:
@@ -189,7 +189,7 @@ def test_update_item_returnvalues_all_old(test_table_s):
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='ALL_OLD',
         UpdateExpression='SET b = :val',
         ExpressionAttributeValues={':val': 'cat'})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
 def test_update_item_returnvalues_updated_old(test_table_s):
     # With ReturnValues=UPDATED_OLD, only the overwritten attributes of the
@@ -219,7 +219,7 @@ def test_update_item_returnvalues_updated_old(test_table_s):
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_OLD',
         UpdateExpression='SET b = :val',
         ExpressionAttributeValues={':val': 'cat'})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
     # However, if we write to two attributes, one which previously existed
     # and one didn't, we get back only the one which previously existed:
@@ -239,7 +239,7 @@ def test_update_item_returnvalues_updated_old(test_table_s):
     # old AttributeUpdates syntax), we don't get Attributes back.
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_OLD',
         AttributeUpdates={})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
 def test_update_item_returnvalues_all_new(test_table_s):
     # With ReturnValues=ALL_NEW, the entire new value of the item (including
@@ -271,9 +271,9 @@ def test_update_item_returnvalues_all_new(test_table_s):
     p = random_string()
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='ALL_NEW',
         UpdateExpression='REMOVE b')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     ret=test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
-    assert not 'Item' in ret
+    assert 'Item' not in ret
 
     # If we write absolutely nothing (the only way to do this is with the
     # old AttributeUpdates syntax), we get an empty item (just the key)
@@ -302,7 +302,7 @@ def test_update_item_returnvalues_updated_new(test_table_s):
     # column is not returned in the response - so it's empty in this case.
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_NEW',
         UpdateExpression='REMOVE b')
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
     # Verify If we write to multiple attributes, we get them all back,
     # regardless of whether they previously existed or not (and again,
@@ -338,11 +338,11 @@ def test_update_item_returnvalues_updated_new(test_table_s):
     p = random_string()
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_NEW',
         AttributeUpdates={})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     test_table_s.put_item(Item={'p': p, 'a': 'hi'})
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_NEW',
         AttributeUpdates={})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
 
 # Test the ReturnValues from an UpdateItem directly modifying a *nested*
 # attribute, in the relevant ReturnValue modes:
@@ -406,7 +406,7 @@ def test_update_item_returnvalues_nested(test_table_s):
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_OLD',
         UpdateExpression='SET a.x1 = :val',
         ExpressionAttributeValues={':val': 8})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_NEW',
         UpdateExpression='SET a.x2 = :val',
         ExpressionAttributeValues={':val': 8})
@@ -421,7 +421,7 @@ def test_update_item_returnvalues_nested(test_table_s):
     ret=test_table_s.update_item(Key={'p': p}, ReturnValues='UPDATED_NEW',
         UpdateExpression='SET a.c[100] = :val',
         ExpressionAttributeValues={':val': 70})
-    assert not 'Attributes' in ret
+    assert 'Attributes' not in ret
     # When removing an item, it shouldn't appear in UPDATED_NEW. Again there
     # a strange exception - which I'm not sure if we should consider it a
     # DynamoDB bug or feature - but it simplifies our own implementation as

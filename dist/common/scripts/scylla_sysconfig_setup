@@ -32,7 +32,7 @@ def bool2str(val):
     return 'yes' if val else 'no'
 
 def str2bool(val):
-    return True if val == 'yes' else False
+    return val == 'yes'
 
 if __name__ == '__main__':
     if os.getuid() > 0:
@@ -49,7 +49,7 @@ if __name__ == '__main__':
     else:
         disable_writeback_cache = 'no'
     ami = str2bool(cfg.get('AMI'))
-    
+
     parser = argparse.ArgumentParser(description='Setting parameters on Scylla sysconfig file.')
     parser.add_argument('--nic',
                         help='specify NIC')
@@ -76,26 +76,43 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.nic and not is_valid_nic(args.nic):
-            print('NIC {} not found.'.format(args.nic))
-            sys.exit(1)
+        print(f'NIC {args.nic} not found.')
+        sys.exit(1)
 
-    ifname = args.nic if args.nic else cfg.get('IFNAME')
-    network_mode = args.mode if args.mode else cfg.get('NETWORK_MODE')
+    ifname = args.nic or cfg.get('IFNAME')
+    network_mode = args.mode or cfg.get('NETWORK_MODE')
 
     if args.setup_nic_and_disks:
-        rps_cpus = run('{} --tune net --nic {} --get-cpu-mask'.format(perftune_base_command(), ifname), shell=True, check=True, capture_output=True, encoding='utf-8').stdout.strip()
+        rps_cpus = run(
+            f'{perftune_base_command()} --tune net --nic {ifname} --get-cpu-mask',
+            shell=True,
+            check=True,
+            capture_output=True,
+            encoding='utf-8',
+        ).stdout.strip()
+
         if len(rps_cpus) > 0:
             cpuset = hex2list(rps_cpus)
-            run('/opt/scylladb/scripts/scylla_cpuset_setup --cpuset {}'.format(cpuset), shell=True, check=True)
+            run(
+                f'/opt/scylladb/scripts/scylla_cpuset_setup --cpuset {cpuset}',
+                shell=True,
+                check=True,
+            )
+
 
     ethdrv = ''
     ethpciid = ''
     if network_mode == 'dpdk':
         dpdk_status = run('/opt/scylladb/scripts/dpdk-devbind.py --status', shell=True, check=True, capture_output=True, encoding='utf-8').stdout.strip()
-        match = re.search('if={} drv=(\S+)'.format(ifname), dpdk_status, flags=re.MULTILINE)
-        ethdrv = match.group(1)
-        match = re.search('^(\\S+:\\S+:\\S+\.\\S+) [^\n]+ if={} '.format(ifname), dpdk_status, flags=re.MULTILINE)
-        ethpciid = match.group(1)
+        match = re.search(f'if={ifname} drv=(\S+)', dpdk_status, flags=re.MULTILINE)
+        ethdrv = match[1]
+        match = re.search(
+            f'^(\\S+:\\S+:\\S+\.\\S+) [^\n]+ if={ifname} ',
+            dpdk_status,
+            flags=re.MULTILINE,
+        )
+
+        ethpciid = match[1]
 
     if args.mode:
         cfg.set('NETWORK_MODE', args.mode)
@@ -127,7 +144,7 @@ if __name__ == '__main__':
 
     if cfg.has_option('DISABLE_WRITEBACK_CACHE') and str2bool(cfg.get('DISABLE_WRITEBACK_CACHE')) != args.disable_writeback_cache:
         cfg.set('DISABLE_WRITEBACK_CACHE', bool2str(args.disable_writeback_cache))
-        
+
     if str2bool(cfg.get('AMI')) != args.ami:
         cfg.set('AMI', bool2str(args.ami))
     cfg.commit()

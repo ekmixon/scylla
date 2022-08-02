@@ -40,7 +40,10 @@ def test_filter_on_unset(cql, test_keyspace):
         assert list(cql.execute(f"SELECT a FROM {table} WHERE b<0 ALLOW FILTERING")) == [(3,)]
         cql.execute(f"ALTER TABLE {table} ADD c int")
         cql.execute(f"INSERT INTO {table} (a, b,c ) VALUES (4, 5, 6)")
-        assert list(cql.execute(f"SELECT a FROM {table} WHERE c<0 ALLOW FILTERING")) == []
+        assert not list(
+            cql.execute(f"SELECT a FROM {table} WHERE c<0 ALLOW FILTERING")
+        )
+
         assert list(cql.execute(f"SELECT a FROM {table} WHERE c>0 ALLOW FILTERING")) == [(4,)]
 
 # Reproducers for issue #8203, which test a scan (whole-table or single-

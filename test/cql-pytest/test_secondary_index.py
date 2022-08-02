@@ -36,30 +36,46 @@ def test_partition_order_with_si(cql, test_keyspace):
         # Insert 20 partitions, all of them with x=1 so that filtering by x=1
         # will yield the same 20 partitions:
         N = 20
-        stmt = cql.prepare('INSERT INTO '+table+' (pk, x) VALUES (?, ?)')
+        stmt = cql.prepare(f'INSERT INTO {table} (pk, x) VALUES (?, ?)')
         for i in range(N):
             cql.execute(stmt, [i, 1])
         # SELECT all the rows, and verify they are returned in increasing
         # partition token order (note that the token is a *signed* number):
-        tokens = [row.system_token_pk for row in cql.execute('SELECT token(pk) FROM '+table)]
+        tokens = [
+            row.system_token_pk
+            for row in cql.execute(f'SELECT token(pk) FROM {table}')
+        ]
+
         assert len(tokens) == N
         assert sorted(tokens) == tokens
         # Now select all the partitions with filtering of x=1. Since all
         # rows have x=1, this shouldn't change the list of matching rows, and
         # also shouldn't check their order:
-        tokens1 = [row.system_token_pk for row in cql.execute('SELECT token(pk) FROM '+table+' WHERE x=1 ALLOW FILTERING')]
+        tokens1 = [
+            row.system_token_pk
+            for row in cql.execute(
+                f'SELECT token(pk) FROM {table} WHERE x=1 ALLOW FILTERING'
+            )
+        ]
+
         assert tokens1 == tokens
         # Now add an index on x, which allows implementing the "x=1"
         # restriction differently. With the index, "ALLOW FILTERING" is
         # no longer necessary. But the order of the results should
         # still not change. Issue #7443 is about the order changing here.
-        cql.execute('CREATE INDEX ON '+table+'(x)')
+        cql.execute(f'CREATE INDEX ON {table}(x)')
         # "CREATE INDEX" does not wait until the index is actually available
         # for use. Reads immediately after the CREATE INDEX may fail or return
         # partial results. So let's retry until reads resume working:
-        for i in range(100):
+        for _ in range(100):
             try:
-                tokens2 = [row.system_token_pk for row in cql.execute('SELECT token(pk) FROM '+table+' WHERE x=1')]
+                tokens2 = [
+                    row.system_token_pk
+                    for row in cql.execute(
+                        f'SELECT token(pk) FROM {table} WHERE x=1'
+                    )
+                ]
+
                 if len(tokens2) == N:
                     break
             except ReadFailure:
@@ -90,7 +106,13 @@ def test_order_of_indexes(scylla_only, cql, test_keyspace):
         # server restart), but some of them fail. Once a proper ordering
         # is implemented, all cases below should succeed.
         def index_used(query, index_name):
-            assert any([index_name in event.description for event in cql.execute(query, trace=True).get_query_trace().events])
+            assert any(
+                index_name in event.description
+                for event in cql.execute(query, trace=True)
+                .get_query_trace()
+                .events
+            )
+
         index_used(f"SELECT * FROM {table} WHERE v3 = 1", "my_v3_idx")
         index_used(f"SELECT * FROM {table} WHERE v3 = 1 and v1 = 2 allow filtering", "my_v3_idx")
         index_used(f"SELECT * FROM {table} WHERE p = 1 and v1 = 1 and v3 = 2 allow filtering", "my_v1_idx")
@@ -214,7 +236,7 @@ def test_paging_with_desc_clustering_order(cql, test_keyspace):
         for i in range(3):
             cql.execute(f"INSERT INTO {table}(p,c) VALUES ({i}, 42)")
         stmt = SimpleStatement(f"SELECT * FROM {table} WHERE c = 42", fetch_size=1)
-        assert len([row for row in cql.execute(stmt)]) == 3
+        assert len(list(cql.execute(stmt))) == 3
 
 # Test that deleting a base partition works fine, even if it produces a large batch
 # of individual view updates. Refs #8852 - view updates used to be applied with
@@ -229,8 +251,8 @@ def test_partition_deletion(cql, test_keyspace, scylla_only):
         for i in range(1342):
             cql.execute(prep, [i])
         cql.execute(f"DELETE FROM {table} WHERE p = 1")
-        res = [row for row in cql.execute(f"SELECT * FROM {table}_c1_idx_index")]
-        assert len(res) == 0
+        res = list(cql.execute(f"SELECT * FROM {table}_c1_idx_index"))
+        assert not res
 
 # Test that deleting a clustering range works fine, even if it produces a large batch
 # of individual view updates. Refs #8852 - view updates used to be applied with

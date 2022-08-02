@@ -49,11 +49,7 @@ inputs = sys.argv[2:]
 
 def read_input(fname):
     try:
-        if fname == '-':
-            f = sys.stdin
-        else:
-            f = open(fname)
-
+        f = sys.stdin if fname == '-' else open(fname)
         return json.load(f)
     except Exception as e:
         logging.error('failed to parse %s: %s', fname, e)
@@ -63,7 +59,9 @@ def read_input(fname):
             f.close()
 
 def is_indexable(e):
-    return any(e['file'].endswith('.' + suffix) for suffix in ['c', 'C', 'cc', 'cxx'])
+    return any(
+        e['file'].endswith(f'.{suffix}') for suffix in ['c', 'C', 'cc', 'cxx']
+    )
 
 # We can only definitely say whether an entry is built under the right
 # prefix when it has an "output" field, so those without are assumed

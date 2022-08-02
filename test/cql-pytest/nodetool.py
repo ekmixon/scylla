@@ -45,7 +45,7 @@ def rest_api_url(cql):
 checked_rest_api = {}
 def has_rest_api(cql):
     url = rest_api_url(cql)
-    if not url in checked_rest_api:
+    if url not in checked_rest_api:
         # Scylla's REST API does not have an official "ping" command,
         # so we just list the keyspaces as a (usually) short operation
         try:
@@ -84,8 +84,5 @@ def take_snapshot(cql, table, tag, skip_flush):
         run_nodetool(cql, "snapshot", *args)
 
 def refreshsizeestimates(cql):
-    if has_rest_api(cql):
-        # The "nodetool refreshsizeestimates" is not available, or needed, in Scylla
-        pass
-    else:
+    if not has_rest_api(cql):
         run_nodetool(cql, "refreshsizeestimates")

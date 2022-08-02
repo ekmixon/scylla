@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Use the run.py library from ../cql-pytest:
 import sys
-sys.path.insert(1, sys.path[0] + '/../cql-pytest')
+sys.path.insert(1, f'{sys.path[0]}/../cql-pytest')
 import run
 
 import os
@@ -21,7 +21,7 @@ if '--aws' in sys.argv:
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-print('Scylla is: ' + run.scylla + '.')
+print(f'Scylla is: {run.scylla}.')
 
 # run_alternator_cmd runs the same as run_scylla_cmd with *additional*
 # parameters, so in particular both CQL and Alternator will be enabled.

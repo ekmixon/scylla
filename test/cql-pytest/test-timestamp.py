@@ -30,10 +30,10 @@ import random
 
 @pytest.fixture(scope="session")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (k int PRIMARY KEY, v int)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # In Cassandra, timestamps can be any *signed* 64-bit integer, not including
 # the most negative 64-bit integer (-2^63) which for deletion times is

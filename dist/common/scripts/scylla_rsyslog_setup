@@ -26,10 +26,13 @@ from scylla_util import *
 
 def update_rsysconf(rsyslog_server):
     if ':' not in rsyslog_server:
-        rsyslog_server = rsyslog_server + ':1514'
+        rsyslog_server = f'{rsyslog_server}:1514'
 
     with open('/etc/rsyslog.d/scylla.conf', 'w') as f:
-        f.write("if $programname ==  'scylla' then @@{};RSYSLOG_SyslogProtocol23Format\n".format(rsyslog_server))
+        f.write(
+            f"if $programname ==  'scylla' then @@{rsyslog_server};RSYSLOG_SyslogProtocol23Format\n"
+        )
+
     systemd_unit('rsyslog.service').restart()
 
 if __name__ == '__main__':

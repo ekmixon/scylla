@@ -53,7 +53,10 @@ if __name__ == '__main__':
     if args.swap_size:
         swapsize = GB(args.swap_size)
         if swapsize > diskfree:
-            print('swap directory {} does not have enough disk space. {}GB space required.'.format(args.swap_directory, to_GB(swapsize)))
+            print(
+                f'swap directory {args.swap_directory} does not have enough disk space. {to_GB(swapsize)}GB space required.'
+            )
+
             sys.exit(1)
     else:
         memtotal = psutil.virtual_memory().total
@@ -62,7 +65,7 @@ if __name__ == '__main__':
         # 16GB - lower of the two', so we need to compare 16g vs memtotal/3 and
         # choose lower one
         # see: https://docs.scylladb.com/faq/#do-i-need-to-configure-swap-on-a-scylla-node
-        swapsize = GB(16) if GB(16) < int(memtotal / 3) else int(memtotal / 3)
+        swapsize = min(GB(16), int(memtotal / 3))
 
         # We should not fill entire disk space with swapfile, it's safer to limit
         # swap size 50% of diskfree
@@ -77,15 +80,27 @@ if __name__ == '__main__':
     swapsize_mb = int(swapsize / 1024 / 1024)
     swapfile = Path(args.swap_directory) / 'swapfile'
     if swapfile.exists():
-        print('swapfile {} already exists'.format(swapfile))
+        print(f'swapfile {swapfile} already exists')
         sys.exit(1)
-    run('dd if=/dev/zero of={} bs=1M count={}'.format(swapfile, swapsize_mb), shell=True, check=True)
+    run(
+        f'dd if=/dev/zero of={swapfile} bs=1M count={swapsize_mb}',
+        shell=True,
+        check=True,
+    )
+
     swapfile.chmod(0o600)
-    run('mkswap -f {}'.format(swapfile), shell=True, check=True)
-    swapunit_bn = run('systemd-escape -p --suffix=swap {}'.format(swapfile), shell=True, check=True, capture_output=True, encoding='utf-8').stdout.strip()
-    swapunit = Path('/etc/systemd/system/{}'.format(swapunit_bn))
+    run(f'mkswap -f {swapfile}', shell=True, check=True)
+    swapunit_bn = run(
+        f'systemd-escape -p --suffix=swap {swapfile}',
+        shell=True,
+        check=True,
+        capture_output=True,
+        encoding='utf-8',
+    ).stdout.strip()
+
+    swapunit = Path(f'/etc/systemd/system/{swapunit_bn}')
     if swapunit.exists():
-        print('swap unit {} already exists'.format(swapunit))
+        print(f'swap unit {swapunit} already exists')
         sys.exit(1)
     unit_data = '''
 [Unit]

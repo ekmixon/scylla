@@ -27,10 +27,10 @@ from util import unique_name, random_string, new_test_table
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (p text, c text, v text, primary key (p, c))")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # An item cannot be inserted without a key. Verify that before we get into
 # the really interesting test below - trying to pass "null" as the value of
@@ -116,7 +116,11 @@ def test_filtering_eq_null(cassandra_bug, cql, table1):
     cql.execute(f"INSERT INTO {table1} (p,c) VALUES ('{p}', '3')")
     # As explained above, none of the above-inserted rows should match -
     # not even the one with an unset v:
-    assert list(cql.execute(f"SELECT c FROM {table1} WHERE p='{p}' AND v=NULL ALLOW FILTERING")) == []
+    assert not list(
+        cql.execute(
+            f"SELECT c FROM {table1} WHERE p='{p}' AND v=NULL ALLOW FILTERING"
+        )
+    )
 
 # In test_insert_null_key() above we verified that a null value is not
 # allowed as a key column - neither as a partition key nor clustering key.

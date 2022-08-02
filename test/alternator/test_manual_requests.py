@@ -27,15 +27,23 @@ def gen_json(n):
     return '{"":'*n + '{}' + '}'*n
 
 def get_signed_request(dynamodb, target, payload):
-    # NOTE: Signing routines use boto3 implementation details and may be prone
-    # to unexpected changes
+# NOTE: Signing routines use boto3 implementation details and may be prone
+# to unexpected changes
+
+
+
     class Request:
         url=dynamodb.meta.client._endpoint.host
-        headers={'X-Amz-Target': 'DynamoDB_20120810.' + target, 'Content-Type': 'application/x-amz-json-1.0'}
+        headers = {
+            'X-Amz-Target': f'DynamoDB_20120810.{target}',
+            'Content-Type': 'application/x-amz-json-1.0',
+        }
+
         body=payload.encode(encoding='UTF-8')
         method='POST'
         context={}
         params={}
+
     req = Request()
     signer = dynamodb.meta.client._request_signer
     signer.get_auth(signer.signing_name, signer.region_name).add_auth(request=req)
@@ -74,10 +82,10 @@ def test_deeply_nested_put(dynamodb, test_table):
 def test_exceed_nested_level_a_little(dynamodb, test_table):
     p = 'xxx'
     c = 'yyy'
-    nested = dict()
+    nested = {}
     nested_it = nested
-    for i in range(50):
-        nested_it['a'] = dict()
+    for _ in range(50):
+        nested_it['a'] = {}
         nested_it = nested_it['a']
     with pytest.raises(ClientError, match='.*Exception.*nested'):
         test_table.put_item(Item={'p': p, 'c': c, 'nested': nested})
@@ -86,10 +94,10 @@ def test_exceed_nested_level_a_little(dynamodb, test_table):
 def test_almost_exceed_nested_level(dynamodb, test_table):
     p = 'xxx'
     c = 'yyy'
-    nested = dict()
+    nested = {}
     nested_it = nested
-    for i in range(30): # 30 added levels + top level + the item itself == 32 total
-        nested_it['a'] = dict()
+    for _ in range(30):
+        nested_it['a'] = {}
         nested_it = nested_it['a']
     test_table.put_item(Item={'p': p, 'c': c, 'nested': nested})
 

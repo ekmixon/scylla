@@ -100,8 +100,11 @@ class ASTBase:
         return "::".join(namespaces)
 
     def ns_qualified_name(self):
-        return self.name if not self.ns_context \
-            else self.combine_ns(self.ns_context) + "::" + self.name
+        return (
+            f"{self.combine_ns(self.ns_context)}::{self.name}"
+            if self.ns_context
+            else self.name
+        )
 
 class BasicType(ASTBase):
     '''AST node that represents terminal grammar nodes for the non-template
@@ -125,9 +128,7 @@ class BasicType(ASTBase):
         return self.__str__()
 
     def to_string(self):
-        if self.is_const:
-            return 'const ' + self.name
-        return self.name
+        return f'const {self.name}' if self.is_const else self.name
 
 
 class TemplateType(ASTBase):
@@ -141,8 +142,11 @@ class TemplateType(ASTBase):
         super().__init__(name)
         # FIXME: dirty hack to translate non-type template parameters (numbers) to BasicType objects
         self.template_parameters = [
-            t if isinstance(t, BasicType) or isinstance(t, TemplateType) else BasicType(name=str(t)) \
-                for t in template_parameters]
+            t
+            if isinstance(t, (BasicType, TemplateType))
+            else BasicType(name=str(t))
+            for t in template_parameters
+        ]
 
     def __str__(self):
         return f"<TemplateType(name={self.name}, args={pformat(self.template_parameters)}>"
@@ -151,7 +155,7 @@ class TemplateType(ASTBase):
         return self.__str__()
 
     def to_string(self):
-        res = self.name + '<'
+        res = f'{self.name}<'
         res += ', '.join([p.to_string() for p in self.template_parameters])
         res += '>'
         return res
@@ -223,7 +227,7 @@ class Attributes(ASTBase):
         self.attr_items = attr_items
 
     def __str__(self):
-        return f"[[{', '.join([a for a in self.attr_items])}]]"
+        return f"[[{', '.join(list(self.attr_items))}]]"
 
     def __repr__(self):
         return self.__str__()
@@ -323,7 +327,7 @@ void serializer<{full_name}>::write(Output& buf, const {full_name}& obj) {{""")
         if not self.final:
             fprintln(cout, f"""  {SETSIZE}(buf, obj);""")
         for member in self.members:
-            if isinstance(member, ClassDef) or isinstance(member, EnumDef):
+            if isinstance(member, (ClassDef, EnumDef)):
                 continue
             fprintln(cout, f"""  static_assert(is_equivalent<decltype(obj.{member.name}), {param_type(member.type)}>::value, "member value has a wrong type");
   {SERIALIZER}(buf, obj.{member.name});""")
@@ -350,12 +354,12 @@ template <typename Input>
         params = []
         local_names = {}
         for index, param in enumerate(self.members):
-            if isinstance(param, ClassDef) or isinstance(param, EnumDef):
+            if isinstance(param, (ClassDef, EnumDef)):
                 continue
-            local_param = "__local_" + str(index)
+            local_param = f"__local_{str(index)}"
             local_names[param.name] = local_param
             if param.attribute:
-                deflt = param_type(param.type) + "()"
+                deflt = f"{param_type(param.type)}()"
                 if param.default_value:
                     deflt = param.default_value
                 if deflt in local_names:
@@ -364,7 +368,7 @@ template <typename Input>
     {DESERIALIZER}(in, boost::type<{param_type(param.type)}>()) : {deflt};""")
             else:
                 fprintln(cout, f"""  auto {local_param} = {DESERIALIZER}(in, boost::type<{param_type(param.type)}>());""")
-            params.append("std::move(" + local_param + ")")
+            params.append(f"std::move({local_param})")
         fprintln(cout, f"""
   {name}{self.template_param_names_str} res {{{", ".join(params)}}};
   return res;
@@ -419,14 +423,18 @@ class RpcVerbParam(ASTBase):
     def to_string(self):
         res = self.type.to_string()
         if self.is_optional():
-            res = 'rpc::optional<' + res + '>'
+            res = f'rpc::optional<{res}>'
         if self.name:
             res += ' '
             res += self.name
         return res
 
     def to_string_send_fn_signature(self):
-        return self.to_string() if not self.is_optional() else self.type.to_string() + ' ' + self.name
+        return (
+            f'{self.type.to_string()} {self.name}'
+            if self.is_optional()
+            else self.to_string()
+        )
 
 
 class RpcVerb(ASTBase):
@@ -498,9 +506,7 @@ class RpcVerb(ASTBase):
         return f"future<{self.return_type.to_string() if self.return_type else ''}>"
 
     def send_function_return_type(self):
-        if self.one_way:
-            return 'future<>'
-        return self.handler_function_return_type()
+        return 'future<>' if self.one_way else self.handler_function_return_type()
 
     def messaging_verb_enum_case(self):
         return f'netw::messaging_verb::{self.name.upper()}'
@@ -521,13 +527,13 @@ class RpcVerb(ASTBase):
             res += ', netw::messaging_service::clock_type::time_point timeout'
         if self.params:
             for idx, p in enumerate(self.params):
-                res += ', ' + p.to_string_send_fn_signature()
+                res += f', {p.to_string_send_fn_signature()}'
                 if include_placeholder_names and not p.name:
                     res += f' _{idx + 1}'
         return res
 
     def send_message_argument_list(self):
-        res = f'ms, '
+        res = 'ms, '
         if self.with_timeout and self.one_way:
             # For some reason the timeout argument position in
             # `send_message_oneway_timeout` is different from `send_message_timeout`.
@@ -538,14 +544,14 @@ class RpcVerb(ASTBase):
                 res += ', timeout'
         if self.params:
             for idx, p in enumerate(self.params):
-                res += ', ' + f'std::move({p.name if p.name else f"_{idx + 1}"})'
+                res += f', std::move({p.name or f"_{idx + 1}"})'
         return res
 
     def send_function_invocation(self):
-        res = 'return ' + self.send_function_name()
+        res = f'return {self.send_function_name()}'
         if not (self.one_way and self.with_timeout):
-            res += '<' + self.send_function_return_type() + '>'
-        res += '(' + self.send_message_argument_list() + ');'
+            res += f'<{self.send_function_return_type()}>'
+        res += f'({self.send_message_argument_list()});'
         return res
 
 class NamespaceDef(ASTBase):
@@ -597,9 +603,7 @@ def type_parse_action(tokens):
 
 
 def enum_value_parse_action(tokens):
-    initializer = None
-    if len(tokens) == 2:
-        initializer = tokens[1]
+    initializer = tokens[1] if len(tokens) == 2 else None
     return EnumValue(name=tokens[0], initializer=initializer)
 
 
@@ -618,12 +622,23 @@ def attributes_parse_action(tokens):
 def class_member_parse_action(tokens):
     member_name = tokens['name']
     raw_attrs = tokens['attributes']
-    attribute = raw_attrs.attr_items[0] if not raw_attrs.empty() else None
+    attribute = None if raw_attrs.empty() else raw_attrs.attr_items[0]
     default = tokens['default'][0] if 'default' in tokens else None
-    if not isinstance(member_name, str): # accessor function declaration
-        return FunctionClassMember(type=tokens["type"], name=member_name[0], attribute=attribute, default_value=default)
-    # data member
-    return DataClassMember(type=tokens["type"], name=member_name, attribute=attribute, default_value=default)
+    return (
+        DataClassMember(
+            type=tokens["type"],
+            name=member_name,
+            attribute=attribute,
+            default_value=default,
+        )
+        if isinstance(member_name, str)
+        else FunctionClassMember(
+            type=tokens["type"],
+            name=member_name[0],
+            attribute=attribute,
+            default_value=default,
+        )
+    )
 
 
 def class_def_parse_action(tokens):
@@ -631,7 +646,7 @@ def class_def_parse_action(tokens):
     is_stub = 'stub' in tokens
     class_members = tokens['members'].asList() if 'members' in tokens else []
     raw_attrs = tokens['attributes']
-    attribute = raw_attrs.attr_items[0] if not raw_attrs.empty() else None
+    attribute = None if raw_attrs.empty() else raw_attrs.attr_items[0]
     template_params = None
     if 'template' in tokens:
         template_params = [ClassTemplateParam(typename=tp[0], name=tp[1]) for tp in tokens['template']]
@@ -777,9 +792,15 @@ struct serializer<const {name}> : public serializer<{name}>
 
 
 def template_params_str(template_params):
-    if not template_params:
-        return ""
-    return ", ".join(map(lambda param: param.typename + " " + param.name, template_params))
+    return (
+        ", ".join(
+            map(
+                lambda param: f"{param.typename} {param.name}", template_params
+            )
+        )
+        if template_params
+        else ""
+    )
 
 
 def handle_enum(enum, hout, cout):
@@ -798,7 +819,7 @@ def join_template(template_params):
 
 def param_type(t):
     if isinstance(t, BasicType):
-        return 'const ' + t.name if t.is_const else t.name
+        return f'const {t.name}' if t.is_const else t.name
     elif isinstance(t, TemplateType):
         return t.name + join_template(t.template_parameters)
 
@@ -807,7 +828,10 @@ def flat_type(t):
     if isinstance(t, BasicType):
         return t.name
     elif isinstance(t, TemplateType):
-        return (t.name + "__" + "_".join([flat_type(p) for p in t.template_parameters])).replace('::', '__')
+        return (
+            f"{t.name}__"
+            + "_".join([flat_type(p) for p in t.template_parameters])
+        ).replace('::', '__')
 
 
 local_types = {}
@@ -847,11 +871,17 @@ def get_template_name(lst):
 
 
 def is_vector(t):
-    return isinstance(t, TemplateType) and (t.name == "std::vector" or t.name == "utils::chunked_vector")
+    return isinstance(t, TemplateType) and t.name in [
+        "std::vector",
+        "utils::chunked_vector",
+    ]
 
 
 def is_variant(t):
-    return isinstance(t, TemplateType) and (t.name == "boost::variant" or t.name == "std::variant")
+    return isinstance(t, TemplateType) and t.name in [
+        "boost::variant",
+        "std::variant",
+    ]
 
 
 def is_optional(t):
@@ -862,7 +892,7 @@ created_writers = set()
 
 
 def get_member_name(name):
-    return name if not name.endswith('()') else name[:-2]
+    return name[:-2] if name.endswith('()') else name
 
 
 def get_members(cls):
@@ -870,9 +900,7 @@ def get_members(cls):
 
 
 def get_variant_type(t):
-    if is_variant(t):
-        return "variant"
-    return param_type(t)
+    return "variant" if is_variant(t) else param_type(t)
 
 
 def variant_to_member(template_parameters):
@@ -906,7 +934,7 @@ struct state_of_{name} {{
             fprintln(cout, f"    state_of_{name}({local_state} parent) : _parent(parent) {{}}")
     fprintln(cout, "};")
     members = get_members(cls)
-    member_class = classes if classes else [cls.name]
+    member_class = classes or [cls.name]
     for m in members:
         if is_local_writable_type(m.type):
             handle_visitors_state(local_writable_types[param_type(m.type)], cout, member_class + [m.name])
@@ -927,10 +955,10 @@ def optional_add_methods(typ):
     if is_basic_type(typ):
         added_type = typ
     elif is_local_writable_type(typ):
-        added_type = param_type(typ) + "_view"
+        added_type = f"{param_type(typ)}_view"
     else:
         print("non supported optional type ", typ)
-        raise "non supported optional type " + param_type(typ)
+        raise f"non supported optional type {param_type(typ)}"
     res = res + reindent(4, f"""
     void write(const {added_type}& obj) {{
         serialize(_out, true);
@@ -949,23 +977,26 @@ def vector_add_method(current, base_state):
     typ = current.type
     res = ""
     if is_basic_type(typ.template_parameters[0]):
-        res = res + f"""
+        res += f"""
   void add_{current.name}({param_type(typ.template_parameters[0])} t)  {{
         serialize(_out, t);
         _count++;
   }}"""
+
     else:
-        res = res + f"""
+        res = f"""{res}
   writer_of_{flat_type(typ.template_parameters[0])}<Output> add() {{
         _count++;
         return {{_out}};
   }}"""
-        res = res + f"""
+
+        res = f"""{res}
   void add({param_view_type(typ.template_parameters[0])} v) {{
         serialize(_out, v);
         _count++;
   }}"""
-    return res + f"""
+
+    return f"""{res}
   after_{base_state}__{current.name}<Output> end_{current.name}() && {{
         _size.set(_out, _count);
         return {{ _out, std::move(_state) }};
@@ -983,18 +1014,23 @@ def vector_add_method(current, base_state):
 
 def add_param_writer_basic_type(name, base_state, typ, var_type="", var_index=None, root_node=False):
     if isinstance(var_index, Number):
-        var_index = "uint32_t(" + str(var_index) + ")"
+        var_index = f"uint32_t({str(var_index)})"
     create_variant_state = f"auto state = state_of_{base_state}__{name}<Output> {{ start_frame(_out), std::move(_state) }};" if var_index and root_node else ""
     set_variant_index = f"serialize(_out, {var_index});\n" if var_index is not None else ""
-    set_command = ("_state.f.end(_out);" if not root_node else "state.f.end(_out);") if var_type != "" else ""
+    set_command = (
+        ("state.f.end(_out);" if root_node else "_state.f.end(_out);")
+        if var_type != ""
+        else ""
+    )
+
     return_command = "{ _out, std::move(_state._parent) }" if var_type != "" and not root_node else "{ _out, std::move(_state) }"
 
     allow_fragmented = False
     if typ.name in ['bytes', 'sstring']:
-        typename = typ.name + '_view'
+        typename = f'{typ.name}_view'
         allow_fragmented = True
     else:
-        typename = 'const ' + typ.name + '&'
+        typename = f'const {typ.name}&'
 
     writer = reindent(4, """
         after_{base_state}__{name}<Output> write_{name}{var_type}({typename} t) && {{
@@ -1018,9 +1054,9 @@ def add_param_writer_basic_type(name, base_state, typ, var_type="", var_index=No
 
 
 def add_param_writer_object(name, base_state, typ, var_type="", var_index=None, root_node=False):
-    var_type1 = "_" + var_type if var_type != "" else ""
+    var_type1 = f"_{var_type}" if var_type != "" else ""
     if isinstance(var_index, Number):
-        var_index = "uint32_t(" + str(var_index) + ")"
+        var_index = f"uint32_t({str(var_index)})"
     create_variant_state = f"auto state = state_of_{base_state}__{name}<Output> {{ start_frame(_out), std::move(_state) }};" if var_index and root_node else ""
     set_variant_index = f"serialize(_out, {var_index});\n" if var_index is not None else ""
     state = "std::move(_state)" if not var_index or not root_node else "std::move(state)"
@@ -1053,7 +1089,7 @@ def add_param_write(current, base_state, vector=False, root_node=False):
     res = ""
     name = get_member_name(current.name)
     if is_basic_type(typ):
-        res = res + add_param_writer_basic_type(name, base_state, typ)
+        res += add_param_writer_basic_type(name, base_state, typ)
     elif is_optional(typ):
         res = res + reindent(4, f"""
     after_{base_state}__{name}<Output> skip_{name}() && {{
@@ -1069,7 +1105,7 @@ def add_param_write(current, base_state, vector=False, root_node=False):
     elif is_vector(typ):
         set_size = "_size.set(_out, 0);" if vector else "serialize(_out, size_type(0));"
 
-        res = res + f"""
+        res = f"""{res}
     {base_state}__{name}<Output> start_{name}() && {{
         return {{ _out, std::move(_state) }};
     }}
@@ -1079,16 +1115,23 @@ def add_param_write(current, base_state, vector=False, root_node=False):
         return {{ _out, std::move(_state) }};
     }}
 """
+
     elif is_local_writable_type(typ):
         res = res + add_param_writer_object(name, base_state, typ)
     elif is_variant(typ):
         for idx, p in enumerate(typ.template_parameters):
             if is_basic_type(p):
-                res = res + add_param_writer_basic_type(name, base_state, p, "_" + param_type(p), idx, root_node)
+                res = res + add_param_writer_basic_type(
+                    name, base_state, p, f"_{param_type(p)}", idx, root_node
+                )
+
             elif is_variant(p):
                 res = res + add_param_writer_object(name, base_state, p, '_' + "variant", idx, root_node)
             elif is_local_writable_type(p):
-                res = res + add_param_writer_object(name, base_state, p, '_' + param_type(p), idx, root_node)
+                res = res + add_param_writer_object(
+                    name, base_state, p, f'_{param_type(p)}', idx, root_node
+                )
+
     else:
         print("something is wrong with type", typ)
     return res
@@ -1097,14 +1140,12 @@ def add_param_write(current, base_state, vector=False, root_node=False):
 def get_return_struct(variant_node, classes):
     if not variant_node:
         return classes
-    if classes[-2] == "variant":
-        return classes[:-2]
-    return classes[:-1]
+    return classes[:-2] if classes[-2] == "variant" else classes[:-1]
 
 
 def add_variant_end_method(base_state, name, classes):
 
-    return_struct = "after_" + base_state + '<Output>'
+    return_struct = f"after_{base_state}<Output>"
     return f"""
     {return_struct}  end_{name}() && {{
         _state.f.end(_out);
@@ -1117,9 +1158,9 @@ def add_variant_end_method(base_state, name, classes):
 def add_end_method(parents, name, variant_node=False, return_value=True):
     if variant_node:
         return add_variant_end_method(parents, name, return_value)
-    base_state = parents + "__" + name
+    base_state = f"{parents}__{name}"
     if return_value:
-        return_struct = "after_" + base_state + '<Output>'
+        return_struct = f"after_{base_state}<Output>"
         return f"""
     {return_struct}  end_{name}() && {{
         _state.f.end(_out);
@@ -1148,11 +1189,10 @@ def add_node(cout, name, member, base_state, prefix, parents, fun, is_type_vecto
         vector_init = ""
     if vector_init != "" or prefix == "":
         state_init = "_state{start_frame(out), std::move(state)}" if parents != base_state and not is_type_final else "_state(state)"
+    elif member and is_variant(member) and parents != base_state:
+        state_init = "_state{start_frame(out), std::move(state)}"
     else:
-        if member and is_variant(member) and parents != base_state:
-            state_init = "_state{start_frame(out), std::move(state)}"
-        else:
-            state_init = ""
+        state_init = ""
     if prefix == "writer_of_":
         constructor = f"""{struct_name}(Output& out)
             : _out(out)
@@ -1179,7 +1219,16 @@ struct {struct_name} {{
 def add_vector_node(cout, member, base_state, parents):
     if member.type.template_parameters[0].name:
         add_template_writer_node(cout, member.type.template_parameters[0])
-    add_node(cout, base_state + "__" + member.name, member.type, base_state, "", parents, vector_add_method(member, base_state), True)
+    add_node(
+        cout,
+        f"{base_state}__{member.name}",
+        member.type,
+        base_state,
+        "",
+        parents,
+        vector_add_method(member, base_state),
+        True,
+    )
 
 
 optional_nodes = set()
@@ -1200,23 +1249,32 @@ struct writer_of_{full_type} {{
 
 
 def add_variant_nodes(cout, member, param, base_state, parents, classes):
-    par = base_state + "__" + member.name
+    par = f"{base_state}__{member.name}"
     for typ in param.template_parameters:
         if is_local_writable_type(typ):
             handle_visitors_nodes(local_writable_types[param_type(typ)], cout, True, classes + [member.name, local_writable_types[param_type(typ)].name])
         if is_variant(typ):
-            name = base_state + "__" + member.name + "__variant"
+            name = f"{base_state}__{member.name}__variant"
             new_member = copy(member) # shallow copy
             new_member.type = typ
             new_member.name = "variant"
-            return_struct = "after_" + par
+            return_struct = f"after_{par}"
             end_method = f"""
     {return_struct}<Output>  end_variant() && {{
         _state.f.end(_out);
         return {{ _out, std::move(_state._parent) }};
     }}
 """
-            add_node(cout, name, None, base_state + "__" + member.name, "after_", name, end_method)
+            add_node(
+                cout,
+                name,
+                None,
+                f"{base_state}__{member.name}",
+                "after_",
+                name,
+                end_method,
+            )
+
             add_variant_nodes(cout, new_member, typ, par, name, classes + [member.name])
             add_node(cout, name, typ, name, "", par, add_param_write(new_member, par))
 
@@ -1249,21 +1307,27 @@ def handle_visitors_nodes(cls, cout, variant_node=False, classes=[]):
     members = get_members(cls)
     if classes:
         base_state_name = "__".join(classes)
-        if variant_node:
-            parents = "__".join(classes[:-1])
-        else:
-            parents = "__".join(classes[:-1])
+        parents = "__".join(classes[:-1])
         current_name = classes[-1]
     else:
         base_state_name = cls.name
         current_name = cls.name
         parents = ""
-    member_classes = classes if classes else [current_name]
+    member_classes = classes or [current_name]
     prefix = "" if classes else "writer_of_"
     if not members:
         add_node(cout, base_state_name, None, base_state_name, prefix, parents, add_end_method(parents, current_name, variant_node, classes), False, cls.final)
         return
-    add_node(cout, base_state_name + "__" + get_member_name(members[-1].name), members[-1].type, base_state_name, "after_", base_state_name, add_end_method(parents, current_name, variant_node, classes))
+    add_node(
+        cout,
+        f"{base_state_name}__{get_member_name(members[-1].name)}",
+        members[-1].type,
+        base_state_name,
+        "after_",
+        base_state_name,
+        add_end_method(parents, current_name, variant_node, classes),
+    )
+
     # Create writer and reader for include class
     if not variant_node:
         for member in get_dependency(cls):
@@ -1271,8 +1335,23 @@ def handle_visitors_nodes(cls, cout, variant_node=False, classes=[]):
     for ind in reversed(range(1, len(members))):
         member = members[ind]
         add_nodes_when_needed(cout, member, base_state_name, parents, member_classes)
-        variant_state = base_state_name + "__" + get_member_name(member.name) if is_variant(member.type) else base_state_name
-        add_node(cout, base_state_name + "__" + get_member_name(members[ind - 1].name), member.type, variant_state, "after_", base_state_name, add_param_write(member, base_state_name), False)
+        variant_state = (
+            f"{base_state_name}__{get_member_name(member.name)}"
+            if is_variant(member.type)
+            else base_state_name
+        )
+
+        add_node(
+            cout,
+            f"{base_state_name}__{get_member_name(members[ind - 1].name)}",
+            member.type,
+            variant_state,
+            "after_",
+            base_state_name,
+            add_param_write(member, base_state_name),
+            False,
+        )
+
     member = members[0]
     add_nodes_when_needed(cout, member, base_state_name, parents, member_classes)
     add_node(cout, base_state_name, member.type, base_state_name, prefix, parents, add_param_write(member, base_state_name, False, not classes), False, cls.final)
@@ -1304,9 +1383,9 @@ def sort_dependencies():
     for k in local_writable_types:
         cls = local_writable_types[k]
         dep_tree[k] = get_dependency(cls)
-    while (len(dep_tree) > 0):
+    while dep_tree:
         found = sorted(k for k in dep_tree if not dep_tree[k])
-        res = res + [k for k in found]
+        res = res + list(found)
         for k in found:
             dep_tree.pop(k)
         for k in dep_tree:
@@ -1321,9 +1400,7 @@ def join_template_view(lst, more_types=[]):
 
 
 def to_view(val):
-    if val in local_writable_types:
-        return val + "_view"
-    return val
+    return f"{val}_view" if val in local_writable_types else val
 
 
 def param_view_type(t):
@@ -1331,7 +1408,7 @@ def param_view_type(t):
         return to_view(t.name)
     elif isinstance(t, TemplateType):
         additional_types = []
-        if t.name == "boost::variant" or t.name == "std::variant":
+        if t.name in ["boost::variant", "std::variant"]:
             additional_types.append("unknown_variant_type")
         return t.name + join_template_view(t.template_parameters, additional_types)
 
@@ -1397,10 +1474,10 @@ def add_view(cout, cls):
     local_names = {}
     for m in members:
         name = get_member_name(m.name)
-        local_names[name] = "this->" + name + "()"
+        local_names[name] = f"this->{name}()"
         full_type = param_view_type(m.type)
         if m.attribute:
-            deflt = m.default_value if m.default_value else param_type(m.type) + "()"
+            deflt = m.default_value or f"{param_type(m.type)}()"
             if deflt in local_names:
                 deflt = local_names[deflt]
             deser = f"(in.size()>0) ? {DESERIALIZER}(in, boost::type<{full_type}>()) : {deflt}"
@@ -1417,7 +1494,7 @@ def add_view(cout, cls):
             }}
         """).format(f=DESERIALIZER, **locals()))
 
-        skip = skip + f"\n       ser::skip(in, boost::type<{full_type}>());"
+        skip = f"{skip}\n       ser::skip(in, boost::type<{full_type}>());"
 
     fprintln(cout, "};")
     skip_impl = "auto& in = v;\n       " + skip if cls.final else "v.skip(read_frame_size(v));"
@@ -1504,9 +1581,7 @@ def handle_objects(tree, hout, cout):
             handle_enum(obj, hout, cout)
         elif isinstance(obj, NamespaceDef):
             handle_objects(obj.members, hout, cout)
-        elif isinstance(obj, RpcVerb):
-            pass
-        else:
+        elif not isinstance(obj, RpcVerb):
             print(f"Unknown type: {obj}")
 
 
@@ -1586,8 +1661,12 @@ def setup_additional_metadata(tree, ns_context = [], parent_template_params=[]):
 
             obj.parent_template_params = parent_template_params
 
-            obj.template_declaration = "template <" + template_params_str(parent_template_params) + ">" \
-                if parent_template_params else ""
+            obj.template_declaration = (
+                f"template <{template_params_str(parent_template_params)}>"
+                if parent_template_params
+                else ""
+            )
+
         elif isinstance(obj, ClassDef):
             obj.ns_context = ns_context
             # need to account for nested types
@@ -1601,8 +1680,12 @@ def setup_additional_metadata(tree, ns_context = [], parent_template_params=[]):
 
             obj.parent_template_params = parent_template_params
 
-            obj.template_declaration = "template <" + template_params_str(obj.template_params + obj.parent_template_params) + ">" \
-                if obj.template_params else ""
+            obj.template_declaration = (
+                f"template <{template_params_str(obj.template_params + obj.parent_template_params)}>"
+                if obj.template_params
+                else ""
+            )
+
 
             nested_template_params = parent_template_params + obj.template_params if obj.template_params else []
 
@@ -1628,8 +1711,7 @@ def load_file(name):
     if config.ns != '':
         fprintln(hout, f"namespace {config.ns} {{")
         fprintln(cout, f"namespace {config.ns} {{")
-    data = parse_file(name)
-    if data:
+    if data := parse_file(name):
         setup_additional_metadata(data)
         handle_types(data)
         handle_objects(data, hout, cout)
@@ -1647,17 +1729,15 @@ def load_file(name):
 
 def general_include(files):
     '''Write serialization-related header includes in the generated files'''
-    name = config.o if config.o else "serializer.dist.hh"
-    # Header file containing implementation of serializers and other supporting classes 
-    cout = open(name.replace('.hh', '.impl.hh'), "w+")
-    # Header file with serializer declarations
-    hout = open(name, "w+")
-    print_cw(cout)
-    print_cw(hout)
-    for n in files:
-        fprintln(hout, '#include "' + n + '"')
-        fprintln(cout, '#include "' + n.replace(".dist.hh", '.dist.impl.hh') + '"')
-    cout.close()
+    name = config.o or "serializer.dist.hh"
+    with open(name.replace('.hh', '.impl.hh'), "w+") as cout:
+        # Header file with serializer declarations
+        hout = open(name, "w+")
+        print_cw(cout)
+        print_cw(hout)
+        for n in files:
+            fprintln(hout, '#include "' + n + '"')
+            fprintln(cout, '#include "' + n.replace(".dist.hh", '.dist.impl.hh') + '"')
     hout.close()
 
 

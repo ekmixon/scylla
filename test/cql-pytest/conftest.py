@@ -108,9 +108,15 @@ def this_dc(cql):
 @pytest.fixture(scope="session")
 def test_keyspace(cql, this_dc):
     name = unique_name()
-    cql.execute("CREATE KEYSPACE " + name + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', '" + this_dc + "' : 1 }")
+    cql.execute(
+        f"CREATE KEYSPACE {name}"
+        + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', '"
+        + this_dc
+        + "' : 1 }"
+    )
+
     yield name
-    cql.execute("DROP KEYSPACE " + name)
+    cql.execute(f"DROP KEYSPACE {name}")
 
 # The "scylla_only" fixture can be used by tests for Scylla-only features,
 # which do not exist on Apache Cassandra. A test using this fixture will be
@@ -120,7 +126,7 @@ def scylla_only(cql):
     # We recognize Scylla by checking if there is any system table whose name
     # contains the word "scylla":
     names = [row.table_name for row in cql.execute("SELECT * FROM system_schema.tables WHERE keyspace_name = 'system'")]
-    if not any('scylla' in name for name in names):
+    if all('scylla' not in name for name in names):
         pytest.skip('Scylla-only test skipped')
 
 # "cassandra_bug" is similar to "scylla_only", except instead of skipping
@@ -132,7 +138,7 @@ def cassandra_bug(cql):
     # We recognize Scylla by checking if there is any system table whose name
     # contains the word "scylla":
     names = [row.table_name for row in cql.execute("SELECT * FROM system_schema.tables WHERE keyspace_name = 'system'")]
-    if not any('scylla' in name for name in names):
+    if all('scylla' not in name for name in names):
         pytest.xfail('A known Cassandra bug')
 
 # TODO: use new_test_table and "yield from" to make shared test_table

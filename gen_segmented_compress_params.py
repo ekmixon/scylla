@@ -46,10 +46,7 @@ def base_offset_size(data_size, chunk_size, n):
 
 
 def relative_offset_size(data_size, chunk_size, n):
-    if n == 1:
-        return int(0)
-    else:
-        return int(math.ceil(math.log2((n - 1) * (chunk_size + 64))))
+    return 0 if n == 1 else int(math.ceil(math.log2((n - 1) * (chunk_size + 64))))
 
 
 def segment_size(data_size, chunk_size, n):
@@ -83,9 +80,8 @@ def best_nominal_data_size_for_bucket_size(chunk_size, bucket_size, n_values):
 
         if bucket_size_bits >= total_size_bits:
             return data_size, data_size_log2
-        else:
-            segments_pb = segments_per_bucket(data_size, chunk_size, n, bucket_size)
-            return n * segments_pb * chunk_size, data_size_log2
+        segments_pb = segments_per_bucket(data_size, chunk_size, n, bucket_size)
+        return n * segments_pb * chunk_size, data_size_log2
 
     space = map(addressable_space, data_size_range_log2())
     return max(space, key=lambda x: x[0])[1]
@@ -218,10 +214,11 @@ if __name__ == '__main__':
                 no_of_segments(data_size, chunk_size, n)))  # normal no of segments for these sizes
             data_sizes.append(data_size_log2)
 
-        segment_infos = []
-        for n_value in n_values:
-            if n_value[0] in data_sizes:
-                segment_infos.append("    {{{}, {}, {}}}".format(*n_value))
+        segment_infos = [
+            "    {{{}, {}, {}}}".format(*n_value)
+            for n_value in n_values
+            if n_value[0] in data_sizes
+        ]
 
         infos_file.write(file_str.format(
             bucket_size=bucket_size,

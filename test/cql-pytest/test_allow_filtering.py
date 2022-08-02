@@ -89,15 +89,17 @@ def check_af_mandatory(cql, table_and_everything, where, filt):
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
-    cql.execute("CREATE TABLE " + table +
-        "(k int, c int, v int, PRIMARY KEY (k,c))")
-    for i in range(0, 3):
-        for j in range(0, 3):
+    table = f"{test_keyspace}.{unique_name()}"
+    cql.execute(
+        (f"CREATE TABLE {table}" + "(k int, c int, v int, PRIMARY KEY (k,c))")
+    )
+
+    for i in range(3):
+        for j in range(3):
             cql.execute(f'INSERT INTO {table} (k, c, v) VALUES ({i}, {j}, {j})')
-    everything = list(cql.execute('SELECT * FROM ' + table))
+    everything = list(cql.execute(f'SELECT * FROM {table}'))
     yield (table, everything)
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # Reading an entire partition, or a contiguous "slice" of a partition, is
 # allowed without ALLOW FILTERING. Adding an unnecessary ALLOW FILTERING
@@ -175,24 +177,25 @@ def wait_for_index(cql, table, column, everything):
 
         if sorted(results) == sorted(everything):
             return
-        
+
         time.sleep(0.1)
 
     pytest.fail('Timeout waiting for index to become up to date.')
 
 @pytest.fixture(scope="module")
 def table2(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
-    cql.execute("CREATE TABLE " + table +
-        "(k int, a int, b int, PRIMARY KEY (k))")
-    cql.execute("CREATE INDEX ON " + table + "(a)")
-    for i in range(0, 5):
-        cql.execute("INSERT INTO {} (k, a, b) VALUES ({}, {}, {})".format(
-                table, i, i*10, i*100))
-    everything = list(cql.execute('SELECT * FROM ' + table))
+    table = f"{test_keyspace}.{unique_name()}"
+    cql.execute(
+        (f"CREATE TABLE {table}" + "(k int, a int, b int, PRIMARY KEY (k))")
+    )
+
+    cql.execute(f"CREATE INDEX ON {table}(a)")
+    for i in range(5):
+        cql.execute(f"INSERT INTO {table} (k, a, b) VALUES ({i}, {i * 10}, {i * 100})")
+    everything = list(cql.execute(f'SELECT * FROM {table}'))
     wait_for_index(cql, table, 'a', everything)
     yield (table, everything)
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # When an index is available, beyond the normal ability to efficiently
 # (without ALLOW FILTERING) retrieve a partition or a partition slice,
@@ -220,19 +223,26 @@ def test_allow_filtering_indexed_a_and_k(cql, table2):
 # us to check even more esoteric cases.
 @pytest.fixture(scope="module")
 def table3(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
-    cql.execute("CREATE TABLE " + table +
-        "(k1 int, k2 int, c1 int, c2 int, a int, b int, PRIMARY KEY ((k1,k2),c1,c2))")
-    cql.execute("CREATE INDEX ON " + table + "(a)")
-    cql.execute("CREATE INDEX ON " + table + "(b)")
-    for i in range(0, 5):
-        for j in range(0, 5):
-            cql.execute("INSERT INTO {} (k1, k2, c1, c2, a, b) VALUES ({}, {}, {}, {}, {}, {})".format(
-                table, i, j, i*10, j*10, i*100, j*100))
-    everything = list(cql.execute('SELECT * FROM ' + table))
+    table = f"{test_keyspace}.{unique_name()}"
+    cql.execute(
+        (
+            f"CREATE TABLE {table}"
+            + "(k1 int, k2 int, c1 int, c2 int, a int, b int, PRIMARY KEY ((k1,k2),c1,c2))"
+        )
+    )
+
+    cql.execute(f"CREATE INDEX ON {table}(a)")
+    cql.execute(f"CREATE INDEX ON {table}(b)")
+    for i in range(5):
+        for j in range(5):
+            cql.execute(
+                f"INSERT INTO {table} (k1, k2, c1, c2, a, b) VALUES ({i}, {j}, {i * 10}, {j * 10}, {i * 100}, {j * 100})"
+            )
+
+    everything = list(cql.execute(f'SELECT * FROM {table}'))
     wait_for_index(cql, table, 'b', everything)
     yield (table, everything)
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 def test_allow_filtering_multi_column(cql, table3):
     """Multi-column restrictions are just like other clustering restrictions"""
@@ -291,17 +301,28 @@ def test_contains_frozen_collection_ck(cql, test_keyspace):
         # The CREATE INDEX for c is necessary to reproduce this bug.
         # Everything works without it.
         cql.execute(f"CREATE INDEX ON {table} (c)")
-        cql.execute("INSERT INTO " + table + " (a, b, c) VALUES (0, {0: 0, 1: 1}, 0)")
+        cql.execute(f"INSERT INTO {table}" + " (a, b, c) VALUES (0, {0: 0, 1: 1}, 0)")
         # The "a=0" below is necessary to reproduce this bug.
-        assert 1 == len(list(cql.execute(
-            "SELECT * FROM " + table + " WHERE a=0 AND c=0 AND b CONTAINS 0 ALLOW FILTERING")))
-        assert 1 == len(list(cql.execute(
-            "SELECT * FROM " + table + " WHERE a=0 AND c=0 AND b CONTAINS KEY 0 ALLOW FILTERING")))
+        assert 1 == len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table} WHERE a=0 AND c=0 AND b CONTAINS 0 ALLOW FILTERING"
+                )
+            )
+        )
+
+        assert 1 == len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table} WHERE a=0 AND c=0 AND b CONTAINS KEY 0 ALLOW FILTERING"
+                )
+            )
+        )
 
 # table4 contains example table from issue #8991
 @pytest.fixture(scope="module")
 def table4(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (k int, c1 int, c2 int, PRIMARY KEY (k,c1,c2))")
     cql.execute(f"CREATE INDEX ON {table} (c2)")
     cql.execute(f"INSERT INTO {table} (k, c1, c2) VALUES (0, 0, 1)")
@@ -321,7 +342,7 @@ def test_select_indexed_cluster(cql, table4):
 # used to test correct filtering of rows fetched from an index table.
 @pytest.fixture(scope="module")
 def table5(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (p int, c1 frozen<list<int>>, c2 frozen<list<int>>, c3 int, PRIMARY KEY (p,c1,c2,c3))")
     cql.execute(f"CREATE INDEX ON {table} (c3)")
     cql.execute(f"INSERT INTO {table} (p, c1, c2, c3) VALUES (0, [1], [2], 0)")

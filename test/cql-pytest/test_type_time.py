@@ -28,10 +28,10 @@ from cassandra.util import Time
 
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (p int PRIMARY KEY, t time)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # According to the Cassandra documentation, a time "can be input either as an
 # integer or using a string representing the time. In the later case, the

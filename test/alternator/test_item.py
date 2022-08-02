@@ -79,12 +79,12 @@ def test_put_and_get_attribute_types(test_table):
         ['hello', 'world', 42],
         {'hello': 'world', 'life': 42},
         {'hello': {'test': 'hi', 'hello': True, 'list': [1, 2, 'hi']}},
-        set(['hello', 'world', 'hi']),
-        set([1, 42, Decimal("3.14")]),
-        set([b'xyz', b'hi']),
+        {'hello', 'world', 'hi'},
+        {1, 42, Decimal("3.14")},
+        {b'xyz', b'hi'},
     ]
-    item = { str(i) : test_items[i] for i in range(len(test_items)) }
-    item.update(key)
+
+    item = { str(i) : test_items[i] for i in range(len(test_items)) } | key
     test_table.put_item(Item=item)
     got_item = test_table.get_item(Key=key, ConsistentRead=True)['Item']
     assert item == got_item
@@ -149,7 +149,7 @@ def test_basic_string_more_update(test_table):
     assert item['c'] == c
     assert item['a1'] == val3
     assert item['a2'] == val2
-    assert not 'a3' in item
+    assert 'a3' not in item
 
 # Test that item operations on a non-existent table name fail with correct
 # error code.
@@ -164,7 +164,9 @@ def test_item_operations_nonexistent_table(dynamodb):
 def test_get_item_missing_item(test_table):
     p = random_string()
     c = random_string()
-    assert not "Item" in test_table.get_item(Key={'p': p, 'c': c}, ConsistentRead=True)
+    assert "Item" not in test_table.get_item(
+        Key={'p': p, 'c': c}, ConsistentRead=True
+    )
 
 # Test that if we have a table with string hash and sort keys, we can't read
 # or write items with other key types to it.
@@ -224,7 +226,10 @@ def test_get_item_wrong_key_type(test_table, test_table_s):
     s = random_string()
     n = Decimal("3.14")
     # Should succeed (correct key types) but have empty result
-    assert not "Item" in test_table.get_item(Key={'p': s, 'c': s}, ConsistentRead=True)
+    assert "Item" not in test_table.get_item(
+        Key={'p': s, 'c': s}, ConsistentRead=True
+    )
+
     # Should fail (incorrect hash key types)
     with pytest.raises(ClientError, match='ValidationException'):
         test_table.get_item(Key={'p': b, 'c': s})
@@ -344,7 +349,7 @@ def test_update_item_two_update_methods(test_table_s):
 # allowed, and results in creation of an empty item.
 def test_update_item_no_update_method(test_table_s):
     p = random_string()
-    assert not "Item" in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert "Item" not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     test_table_s.update_item(Key={'p': p})
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p}
 
@@ -380,7 +385,7 @@ def test_delete_item_hash(test_table_s):
     test_table_s.put_item(Item={'p': p})
     assert 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     test_table_s.delete_item(Key={'p': p})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
 
 # Basic test for DeleteItem, with hash and sort key
 def test_delete_item_sort(test_table):
@@ -390,7 +395,7 @@ def test_delete_item_sort(test_table):
     test_table.put_item(Item=key)
     assert 'Item' in test_table.get_item(Key=key, ConsistentRead=True)
     test_table.delete_item(Key=key)
-    assert not 'Item' in test_table.get_item(Key=key, ConsistentRead=True)
+    assert 'Item' not in test_table.get_item(Key=key, ConsistentRead=True)
 
 # Test that PutItem completely replaces an existing item. It shouldn't merge
 # it with a previously existing value, as UpdateItem does!
@@ -428,12 +433,12 @@ def test_update_item_non_existent(test_table_s):
     p = random_string()
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'a': {'Action': 'DELETE'}})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     # Test the same thing - that an attribute-deleting update does not
     # create a non-existing item - but now with the update expression syntax:
     p = random_string()
     test_table_s.update_item(Key={'p': p}, UpdateExpression='REMOVE a')
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
 
 # UpdateItem's AttributeUpdate's DELETE operations has two different
 # meanings. It can be used to delete an entire attribute, but can also be
@@ -460,57 +465,99 @@ def test_update_item_delete(test_table_s):
     # "Value" is allowed for sets, but the existing content of the attribute
     # must be a set as well, otherwise we get an error on mismatched type
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
-        test_table_s.update_item(Key={'p': p},
-            AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([1, 2])}})
+        test_table_s.update_item(
+            Key={'p': p},
+            AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {1, 2}}},
+        )
+
     # When "Value" is a set and the attribute is a set of the same type,
     # DELETE remove these items from the set attribute. It works on all
     # three set types (string, bytes, number):
-    test_table_s.put_item(Item={'p': p, 'a': set([1, 2, 3, 4, 5])})
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([2, 4])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([1, 3, 5])}
-    test_table_s.put_item(Item={'p': p, 'a': set(['dog', 'cat', 'lion'])})
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set(['dog'])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set(['cat', 'lion'])}
-    test_table_s.put_item(Item={'p': p, 'a': set([b'dog', b'cat', b'lion'])})
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([b'cat'])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([b'dog', b'lion'])}
+    test_table_s.put_item(Item={'p': p, 'a': {1, 2, 3, 4, 5}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {2, 4}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {1, 3, 5}}
+
+    test_table_s.put_item(Item={'p': p, 'a': {'dog', 'cat', 'lion'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {'dog'}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {'cat', 'lion'}}
+
+    test_table_s.put_item(Item={'p': p, 'a': {b'dog', b'cat', b'lion'}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {b'cat'}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {b'dog', b'lion'}}
+
     # If the item and value are both sets, but not of the same type, we
     # get an error on the mismatched types:
-    test_table_s.put_item(Item={'p': p, 'a': set([1, 2, 3, 4, 5])})
+    test_table_s.put_item(Item={'p': p, 'a': {1, 2, 3, 4, 5}})
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
-        test_table_s.update_item(Key={'p': p},
-            AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set(['hi'])}})
+        test_table_s.update_item(
+            Key={'p': p},
+            AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {'hi'}}},
+        )
+
     # An empty set is not allowed as Value:
-    test_table_s.put_item(Item={'p': p, 'a': set([1, 2, 3])})
+    test_table_s.put_item(Item={'p': p, 'a': {1, 2, 3}})
     with pytest.raises(ClientError, match='ValidationException.*empty'):
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([])}})
     # Deleting all the elments from a set doesn't leave an empty set
     # (which DynamoDB doesn't allow) but rather deletes the attribute:
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([1, 2, 3])}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {1, 2, 3}}},
+    )
+
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p}
     # Removing an item not already in the set is fine, and ignores it:
-    test_table_s.put_item(Item={'p': p, 'a': set([1, 2, 3])})
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([4])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([1, 2, 3])}
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([2, 5])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([1, 3])}
+    test_table_s.put_item(Item={'p': p, 'a': {1, 2, 3}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {4}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {1, 2, 3}}
+
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {2, 5}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {1, 3}}
+
     # Asking to delete an attribute or parts of a set attribute is silently
     # ignored if the item doesn't exist (no error, and item isn't created).
     p = random_string()
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'a': {'Action': 'DELETE'}})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': set([4])}})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'DELETE', 'Value': {4}}},
+    )
+
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
 
 # Test for UpdateItem's AttributeUpdate's ADD operation, which has different
 # meanings for numbers and sets (and as it turns out, also for lists) - but
@@ -532,26 +579,49 @@ def test_update_item_add(test_table_s):
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': Decimal(5.5), 'b': 2}
 
     # ADD operation on sets:
-    test_table_s.put_item(Item={'p': p, 'a': set([1, 2])})
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'ADD', 'Value': set([3, 4])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([1, 2, 3, 4])}
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'a': {'Action': 'ADD', 'Value': set([3, 5])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([1, 2, 3, 4, 5])}
+    test_table_s.put_item(Item={'p': p, 'a': {1, 2}})
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'ADD', 'Value': {3, 4}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {1, 2, 3, 4}}
+
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'a': {'Action': 'ADD', 'Value': {3, 5}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {1, 2, 3, 4, 5}}
+
     # Adding a set to a non-existent attribute is allowed (as if empty set)
     # The DynamoDB documentation suggests this is only allowed for a set
     # of numbers, but it actually works for any set type.
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'b': {'Action': 'ADD', 'Value': set([7])}})
-    test_table_s.update_item(Key={'p': p},
-        AttributeUpdates={'c': {'Action': 'ADD', 'Value': set(['a', 'b'])}})
-    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': set([1, 2, 3, 4, 5]), 'b': set([7]), 'c': set(['a', 'b'])}
+    test_table_s.update_item(
+        Key={'p': p}, AttributeUpdates={'b': {'Action': 'ADD', 'Value': {7}}}
+    )
+
+    test_table_s.update_item(
+        Key={'p': p},
+        AttributeUpdates={'c': {'Action': 'ADD', 'Value': {'a', 'b'}}},
+    )
+
+    assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)[
+        'Item'
+    ] == {'p': p, 'a': {1, 2, 3, 4, 5}, 'b': {7}, 'c': {'a', 'b'}}
+
     # The set type in the attribute and the Value argument needs to match:
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
-        test_table_s.put_item(Item={'p': p, 'a': set([1, 2])})
-        test_table_s.update_item(Key={'p': p},
-            AttributeUpdates={'a': {'Action': 'ADD', 'Value': set(['a'])}})
+        test_table_s.put_item(Item={'p': p, 'a': {1, 2}})
+        test_table_s.update_item(
+            Key={'p': p},
+            AttributeUpdates={'a': {'Action': 'ADD', 'Value': {'a'}}},
+        )
+
 
     # ADD operation on lists (not documented, but works similar to sets!)
     test_table_s.put_item(Item={'p': p, 'a': [1, 2]})
@@ -585,13 +655,13 @@ def test_update_item_add(test_table_s):
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': {'y': 2}}})
     with pytest.raises(ClientError, match='ValidationException.*type'):
-        test_table_s.put_item(Item={'p': p, 'a': set(['dog'])})
+        test_table_s.put_item(Item={'p': p, 'a': {'dog'}})
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': 'cat'}})
     # While numbers, sets and lists *are* supported by ADD, you can't
     # mix them - adding a number to an attribute which is already a set,
     # and so on.
-    test_table_s.put_item(Item={'p': p, 'a': set(['dog'])})
+    test_table_s.put_item(Item={'p': p, 'a': {'dog'}})
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': 2}})
@@ -600,8 +670,11 @@ def test_update_item_add(test_table_s):
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': ['cat']}})
     test_table_s.put_item(Item={'p': p, 'a': ['dog']})
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
-        test_table_s.update_item(Key={'p': p},
-            AttributeUpdates={'a': {'Action': 'ADD', 'Value': set(['cat'])}})
+        test_table_s.update_item(
+            Key={'p': p},
+            AttributeUpdates={'a': {'Action': 'ADD', 'Value': {'cat'}}},
+        )
+
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': 3}})
@@ -610,12 +683,15 @@ def test_update_item_add(test_table_s):
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': ['dog']}})
     with pytest.raises(ClientError, match='ValidationException.*mismatch'):
-        test_table_s.update_item(Key={'p': p},
-            AttributeUpdates={'a': {'Action': 'ADD', 'Value': set(['dog'])}})
+        test_table_s.update_item(
+            Key={'p': p},
+            AttributeUpdates={'a': {'Action': 'ADD', 'Value': {'dog'}}},
+        )
+
 
     # If the entire item doesn't exist, ADD can create it just like we
     # tested above that it can create an attribute.
-    for value in [3, set([1, 2]), set(['a', 'b']), [1, 2]]:
+    for value in [3, {1, 2}, {'a', 'b'}, [1, 2]]:
         test_table_s.delete_item(Key={'p': p})
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'a': {'Action': 'ADD', 'Value': value}})
@@ -630,7 +706,7 @@ def test_update_item_empty_attribute(test_table_s):
     with pytest.raises(ClientError, match='ValidationException.*empty'):
         test_table_s.update_item(Key={'p': p},
             AttributeUpdates={'c': {'Action': 'PUT', 'Value': set([])}})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     # But empty lists, maps, strings and binary blobs *are* allowed:
     test_table_s.update_item(Key={'p': p},
         AttributeUpdates={'d': {'Action': 'PUT', 'Value': []}})
@@ -659,7 +735,7 @@ def test_put_item_empty_attribute(test_table_s):
     # Empty sets are *not* allowed
     with pytest.raises(ClientError, match='ValidationException.*empty'):
         test_table_s.put_item(Item={'p': p, 'a': set([])})
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
+    assert 'Item' not in test_table_s.get_item(Key={'p': p}, ConsistentRead=True)
     # But empty lists, maps, strings and binary blobs *are* allowed:
     test_table_s.put_item(Item={'p': p, 'a': [], 'b': {}, 'c': '', 'd': bytearray('', 'utf-8')})
     assert test_table_s.get_item(Key={'p': p}, ConsistentRead=True)['Item'] == {'p': p, 'a': [], 'b': {}, 'c': '', 'd': bytearray('', 'utf-8')}

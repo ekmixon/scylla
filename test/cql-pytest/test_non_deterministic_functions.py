@@ -44,14 +44,14 @@ def lwt_nondeterm_fn_repeated_execute(cql, test_keyspace, pk_type, fn):
         select_str = f"SELECT * FROM {table}"
         num_iterations = 10
 
-        for i in range(num_iterations):
+        for _ in range(num_iterations):
             cql.execute(insert_str)
             sleep(0.001)
         rows = list(cql.execute(select_str))
         assert len(rows) == num_iterations
 
         insert_stmt = cql.prepare(insert_str)
-        for i in range(num_iterations):
+        for _ in range(num_iterations):
             cql.execute(insert_stmt, [])
             sleep(0.001)
         rows = list(cql.execute(select_str))

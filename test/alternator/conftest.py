@@ -44,7 +44,9 @@ import botocore
 import sys
 from distutils.version import LooseVersion
 if (LooseVersion(botocore.__version__) < LooseVersion('1.12.54')):
-    pytest.exit("Your Boto library is too old. Please upgrade it,\ne.g. using:\n    sudo pip{} install --upgrade boto3".format(sys.version_info[0]))
+    pytest.exit(
+        f"Your Boto library is too old. Please upgrade it,\ne.g. using:\n    sudo pip{sys.version_info[0]} install --upgrade boto3"
+    )
 
 # By default, tests run against a local Scylla installation on localhost:8080/.
 # The "--aws" option can be used to run against Amazon DynamoDB in the us-east-1
@@ -86,39 +88,37 @@ def dynamodb(request):
     boto_config = botocore.client.Config(parameter_validation=False)
     if request.config.getoption('aws'):
         return boto3.resource('dynamodb', config=boto_config)
-    else:
         # Even though we connect to the local installation, Boto3 still
         # requires us to specify dummy region and credential parameters,
         # otherwise the user is forced to properly configure ~/.aws even
         # for local runs.
-        if request.config.getoption('url') != None:
-            local_url = request.config.getoption('url')
-        else:
-            local_url = 'https://localhost:8043' if request.config.getoption('https') else 'http://localhost:8000'
-        # Disable verifying in order to be able to use self-signed TLS certificates
-        verify = not request.config.getoption('https')
-        return boto3.resource('dynamodb', endpoint_url=local_url, verify=verify,
-            region_name='us-east-1', aws_access_key_id='alternator', aws_secret_access_key='secret_pass',
-            config=boto_config.merge(botocore.client.Config(retries={"max_attempts": 0}, read_timeout=300)))
+    if request.config.getoption('url') is None:
+        local_url = 'https://localhost:8043' if request.config.getoption('https') else 'http://localhost:8000'
+    else:
+        local_url = request.config.getoption('url')
+    # Disable verifying in order to be able to use self-signed TLS certificates
+    verify = not request.config.getoption('https')
+    return boto3.resource('dynamodb', endpoint_url=local_url, verify=verify,
+        region_name='us-east-1', aws_access_key_id='alternator', aws_secret_access_key='secret_pass',
+        config=boto_config.merge(botocore.client.Config(retries={"max_attempts": 0}, read_timeout=300)))
 
 @pytest.fixture(scope="session")
 def dynamodbstreams(request):
     if request.config.getoption('aws'):
         return boto3.client('dynamodbstreams')
-    else:
         # Even though we connect to the local installation, Boto3 still
         # requires us to specify dummy region and credential parameters,
         # otherwise the user is forced to properly configure ~/.aws even
         # for local runs.
-        if request.config.getoption('url') != None:
-            local_url = request.config.getoption('url')
-        else:
-            local_url = 'https://localhost:8043' if request.config.getoption('https') else 'http://localhost:8000'
-        # Disable verifying in order to be able to use self-signed TLS certificates
-        verify = not request.config.getoption('https')
-        return boto3.client('dynamodbstreams', endpoint_url=local_url, verify=verify,
-            region_name='us-east-1', aws_access_key_id='alternator', aws_secret_access_key='secret_pass',
-            config=botocore.client.Config(retries={"max_attempts": 3}))
+    if request.config.getoption('url') is None:
+        local_url = 'https://localhost:8043' if request.config.getoption('https') else 'http://localhost:8000'
+    else:
+        local_url = request.config.getoption('url')
+    # Disable verifying in order to be able to use self-signed TLS certificates
+    verify = not request.config.getoption('https')
+    return boto3.client('dynamodbstreams', endpoint_url=local_url, verify=verify,
+        region_name='us-east-1', aws_access_key_id='alternator', aws_secret_access_key='secret_pass',
+        config=botocore.client.Config(retries={"max_attempts": 3}))
 
 # A function-scoped autouse=True fixture allows us to test after every test
 # that the server is still alive - and if not report the test which crashed
@@ -243,12 +243,16 @@ def filled_test_table(dynamodb):
         'attribute': "x" * 7,
         'another': "y" * 16
     } for i in range(count)]
-    items = items + [{
-        'p': 'long',
-        'c': str(i),
-        'attribute': "x" * (1 + i % 7),
-        'another': "y" * (1 + i % 16)
-    } for i in range(count)]
+    items += [
+        {
+            'p': 'long',
+            'c': str(i),
+            'attribute': "x" * (1 + i % 7),
+            'another': "y" * (1 + i % 16),
+        }
+        for i in range(count)
+    ]
+
     items.append({'p': 'hello', 'c': 'world', 'str': 'and now for something completely different'})
 
     with table.batch_writer() as batch:

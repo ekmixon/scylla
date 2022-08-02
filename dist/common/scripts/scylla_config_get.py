@@ -35,10 +35,10 @@ def get(config, key):
         sys.exit(1)
     if isinstance(val, list):
         for v in val:
-            print("%s" % v)
+            print(f"{v}")
     elif isinstance(val, dict):
         for k, v in list(val.items()):
-            print("%s:%s" % (k, v))
+            print(f"{k}:{v}")
     else:
         print(val)
 

@@ -258,7 +258,7 @@ def test_scan_select(filled_test_table):
 def test_scan_parallel(filled_test_table):
     test_table, items = filled_test_table
     for nsegments in [1, 2, 17]:
-        print('Testing TotalSegments={}'.format(nsegments))
+        print(f'Testing TotalSegments={nsegments}')
         got_items = []
         for segment in range(nsegments):
             got_items.extend(full_scan(test_table, TotalSegments=nsegments, Segment=segment))

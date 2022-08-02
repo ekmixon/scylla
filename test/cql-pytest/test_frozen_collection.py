@@ -32,10 +32,10 @@ from util import unique_name, new_test_table
 # A test table with a (frozen) nested collection as its primary key.
 @pytest.fixture(scope="module")
 def table1(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (k frozen<map<set<int>, int>> PRIMARY KEY)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 
 # In Scylla, Sets are stored in sorted order (by the natural order of their
 # contained elements) no matter what order the elements are added. It is also
@@ -54,31 +54,148 @@ def test_wrong_set_order_in_nested(cql, table1):
     # does not matter, as expected:
     def s(*args):
         return ",".join([str(i) for i in args])
-    cql.execute("INSERT INTO " + table1 + " (k) VALUES ({{" + s(k, k+1, k+2) + "}: 1})")
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k, k+1, k+2) + "}: 1}"))) == 1
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k+1, k, k+2) + "}: 1}"))) == 1
-    k = k + 1 # advance k so the next test will write to a different item
-    cql.execute("INSERT INTO " + table1 + " (k) VALUES ({{" + s(k+1, k, k+2) + "}: 1})")
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k, k+1, k+2) + "}: 1}"))) == 1
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k+1, k, k+2) + "}: 1}"))) == 1
-    k = k + 1
+
+    cql.execute(
+        f"INSERT INTO {table1}"
+        + " (k) VALUES ({{"
+        + s(k, k + 1, k + 2)
+        + "}: 1})"
+    )
+
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k, k + 1, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k + 1, k, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    k += 1
+    cql.execute(
+        f"INSERT INTO {table1}"
+        + " (k) VALUES ({{"
+        + s(k + 1, k, k + 2)
+        + "}: 1})"
+    )
+
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k, k + 1, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k + 1, k, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    k += 1
 
     # Try the same with prepared statements. Here we can trigger issue #7856.
     insert = cql.prepare(f"INSERT INTO {table1} (k) VALUES (?)")
     lookup = cql.prepare(f"SELECT * FROM {table1} WHERE k = ?")
-    cql.execute(insert, [{tuple([k, k+1, k+2]): 1}])
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k, k+1, k+2) + "}: 1}"))) == 1
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k+1, k, k+2) + "}: 1}"))) == 1
-    assert len(list(cql.execute(lookup, [{tuple([k, k+1, k+2]): 1}]))) == 1
-    # This lookup by wrong order triggers issue #7856: 
-    assert len(list(cql.execute(lookup, [{tuple([k+1, k, k+2]): 1}]))) == 1
-    k = k + 1
+    cql.execute(insert, [{(k, k+1, k+2): 1}])
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k, k + 1, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k + 1, k, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    assert len(list(cql.execute(lookup, [{(k, k+1, k+2): 1}]))) == 1
+    # This lookup by wrong order triggers issue #7856:
+    assert len(list(cql.execute(lookup, [{(k+1, k, k+2): 1}]))) == 1
+    k += 1
     # This insert by wrong order triggers issue #7856 in the lookups which follow.
-    cql.execute(insert, [{tuple([k+1, k, k+2]): 1}])
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k, k+1, k+2) + "}: 1}"))) == 1
-    assert len(list(cql.execute("SELECT * FROM " + table1 + " WHERE k = {{" + s(k+1, k, k+2) + "}: 1}"))) == 1
-    assert len(list(cql.execute(lookup, [{tuple([k, k+1, k+2]): 1}]))) == 1
-    assert len(list(cql.execute(lookup, [{tuple([k+1, k, k+2]): 1}]))) == 1
+    cql.execute(insert, [{(k+1, k, k+2): 1}])
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k, k + 1, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    assert (
+        len(
+            list(
+                cql.execute(
+                    f"SELECT * FROM {table1}"
+                    + " WHERE k = {{"
+                    + s(k + 1, k, k + 2)
+                    + "}: 1}"
+                )
+            )
+        )
+        == 1
+    )
+
+    assert len(list(cql.execute(lookup, [{(k, k+1, k+2): 1}]))) == 1
+    assert len(list(cql.execute(lookup, [{(k+1, k, k+2): 1}]))) == 1
 
 
 # This demonstrates a strange side-effect of issue #7856: The Python driver
@@ -95,7 +212,7 @@ def test_wrong_set_order_in_nested_2(cql, table1):
     k = random.randint(1,1000000000)
     insert = cql.prepare(f"INSERT INTO {table1} (k) VALUES (?)")
     # Insert map with frozen-set key in "wrong" order:
-    cql.execute(insert, [{tuple([k+1, k, k+2]): 1}])
+    cql.execute(insert, [{(k+1, k, k+2): 1}])
     # This is an inefficient scan of the entire table, it can see more than
     # the item we just inserted, but it doesn't matter.
     for row in cql.execute(f"SELECT * FROM {table1}"):
@@ -114,17 +231,17 @@ def test_wrong_set_order_in_nested_2(cql, table1):
 # order, and everything is fine.
 @pytest.fixture(scope="module")
 def table_fsi(cql, test_keyspace):
-    table = test_keyspace + "." + unique_name()
+    table = f"{test_keyspace}.{unique_name()}"
     cql.execute(f"CREATE TABLE {table} (k frozen<set<int>> PRIMARY KEY)")
     yield table
-    cql.execute("DROP TABLE " + table)
+    cql.execute(f"DROP TABLE {table}")
 def test_wrong_set_order(cql, table_fsi):
     i = random.randint(1,1000000000)
     insert = cql.prepare(f"INSERT INTO {table_fsi} (k) VALUES (?)")
     lookup = cql.prepare(f"SELECT * FROM {table_fsi} WHERE k = ?")
-    cql.execute(insert, [tuple([i+1, i, i+2])])
-    assert len(list(cql.execute(lookup, [tuple([i, i+1, i+2])]))) == 1
-    assert len(list(cql.execute(lookup, [tuple([i+1, i, i+2])]))) == 1
+    cql.execute(insert, [(i+1, i, i+2)])
+    assert len(list(cql.execute(lookup, [(i, i+1, i+2)]))) == 1
+    assert len(list(cql.execute(lookup, [(i+1, i, i+2)]))) == 1
 
 # This test shows we can use a frozen collection as a clustering key, and
 # insert such items (with unprepared and prepared statements). The next
@@ -132,15 +249,17 @@ def test_wrong_set_order(cql, table_fsi):
 # thing but with reversed sort order, and there we start having problems.
 def test_clustering_key_frozen_collection(cql, test_keyspace):
     with new_test_table(cql, test_keyspace,
-            "a int, b frozen<set<int>>, PRIMARY KEY (a,b)") as table:
+                "a int, b frozen<set<int>>, PRIMARY KEY (a,b)") as table:
         # Insert with unprepared statement:
-        cql.execute("INSERT INTO " + table + " (a, b) VALUES (0, {1, 2, 3})")
-        assert list(cql.execute("SELECT * FROM " + table)) == [(0, {1, 2, 3})]
+        cql.execute(f"INSERT INTO {table}" + " (a, b) VALUES (0, {1, 2, 3})")
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [(0, {1, 2, 3})]
         # Insert with prepared statement:
         stmt = cql.prepare(f"INSERT INTO {table} (a, b) VALUES (?, ?)")
         cql.execute(stmt, [0, {2, 3, 4}])
-        assert list(cql.execute("SELECT * FROM " + table)) == [
-            (0, {1, 2, 3}), (0, {2, 3, 4})]
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [
+            (0, {1, 2, 3}),
+            (0, {2, 3, 4}),
+        ]
 
 # This is the same test as above (test_clustering_key_frozen_collection),
 # just the clustering key is sorted in reverse order. Somehow, this broke
@@ -149,46 +268,52 @@ def test_clustering_key_frozen_collection(cql, test_keyspace):
 # Reproduces issues #7868 and #7875.
 def test_clustering_key_reverse_frozen_set(cql, test_keyspace):
     with new_test_table(cql, test_keyspace,
-            "a int, b frozen<set<int>>, PRIMARY KEY (a,b)",
-            "WITH CLUSTERING ORDER BY (b DESC)") as table:
+                "a int, b frozen<set<int>>, PRIMARY KEY (a,b)",
+                "WITH CLUSTERING ORDER BY (b DESC)") as table:
         # Insert with unprepared statement:
         # Issue #7875: Scylla produces an error "Invalid set literal for b
         # of type frozen<set<int>>", while this should be valid (and we saw
         # above it is allowed for increasing order!)
-        cql.execute("INSERT INTO " + table + " (a, b) VALUES (0, {1, 2, 3})")
-        assert list(cql.execute("SELECT * FROM " + table)) == [(0, {1, 2, 3})]
+        cql.execute(f"INSERT INTO {table}" + " (a, b) VALUES (0, {1, 2, 3})")
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [(0, {1, 2, 3})]
         # Insert with prepared statement:
         # Issue #7868: The prepare() of the following statement crashes
         # Scylla with an assertion failure.
         stmt = cql.prepare(f"INSERT INTO {table} (a, b) VALUES (?, ?)")
         cql.execute(stmt, [0, {2, 3, 4}])
-        assert list(cql.execute("SELECT * FROM " + table)) == [
-            (0, {2, 3, 4}), (0, {1, 2, 3})]
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [
+            (0, {2, 3, 4}),
+            (0, {1, 2, 3}),
+        ]
 
 # Reproduces issues #7868 and #7875.
 def test_clustering_key_reverse_frozen_list(cql, test_keyspace):
     with new_test_table(cql, test_keyspace,
-            "a int, b frozen<list<int>>, PRIMARY KEY (a,b)",
-            "WITH CLUSTERING ORDER BY (b DESC)") as table:
+                "a int, b frozen<list<int>>, PRIMARY KEY (a,b)",
+                "WITH CLUSTERING ORDER BY (b DESC)") as table:
         # Insert with unprepared statement. Issue #7875.
-        cql.execute("INSERT INTO " + table + " (a, b) VALUES (0, [1, 2, 3])")
-        assert list(cql.execute("SELECT * FROM " + table)) == [(0, [1, 2, 3])]
+        cql.execute(f"INSERT INTO {table} (a, b) VALUES (0, [1, 2, 3])")
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [(0, [1, 2, 3])]
         # Insert with prepared statement. Issue #7868.
         stmt = cql.prepare(f"INSERT INTO {table} (a, b) VALUES (?, ?)")
         cql.execute(stmt, [0, [2, 3, 4]])
-        assert list(cql.execute("SELECT * FROM " + table)) == [
-            (0, [2, 3, 4]), (0, [1, 2, 3])]
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [
+            (0, [2, 3, 4]),
+            (0, [1, 2, 3]),
+        ]
 
 # Reproduces issues #7868 and #7875.
 def test_clustering_key_reverse_frozen_map(cql, test_keyspace):
     with new_test_table(cql, test_keyspace,
-            "a int, b frozen<map<int, int>>, PRIMARY KEY (a,b)",
-            "WITH CLUSTERING ORDER BY (b DESC)") as table:
+                "a int, b frozen<map<int, int>>, PRIMARY KEY (a,b)",
+                "WITH CLUSTERING ORDER BY (b DESC)") as table:
         # Insert with unprepared statement. Issue #7875.
-        cql.execute("INSERT INTO " + table + " (a, b) VALUES (0, {1: 2, 3: 4})")
-        assert list(cql.execute("SELECT * FROM " + table)) == [(0, {1: 2, 3: 4})]
+        cql.execute(f"INSERT INTO {table}" + " (a, b) VALUES (0, {1: 2, 3: 4})")
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [(0, {1: 2, 3: 4})]
         # Insert with prepared statement. Issue #7868.
         stmt = cql.prepare(f"INSERT INTO {table} (a, b) VALUES (?, ?)")
         cql.execute(stmt, [0, {2: 3, 4: 5}])
-        assert list(cql.execute("SELECT * FROM " + table)) == [
-            (0, {2: 3, 4: 5}), (0, {1: 2, 3: 4})]
+        assert list(cql.execute(f"SELECT * FROM {table}")) == [
+            (0, {2: 3, 4: 5}),
+            (0, {1: 2, 3: 4}),
+        ]

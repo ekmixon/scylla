@@ -173,9 +173,17 @@ def test_projection_expression_path(test_table_s):
     # existing item yields an empty Item object. However, if the item does not
     # exist at all, the Item object will be missing entirely:
     p = random_string()
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True, ProjectionExpression='x')
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True, ProjectionExpression='a.x')
-    assert not 'Item' in test_table_s.get_item(Key={'p': p}, ConsistentRead=True, ProjectionExpression='a[0]')
+    assert 'Item' not in test_table_s.get_item(
+        Key={'p': p}, ConsistentRead=True, ProjectionExpression='x'
+    )
+
+    assert 'Item' not in test_table_s.get_item(
+        Key={'p': p}, ConsistentRead=True, ProjectionExpression='a.x'
+    )
+
+    assert 'Item' not in test_table_s.get_item(
+        Key={'p': p}, ConsistentRead=True, ProjectionExpression='a[0]'
+    )
 
 # Above in test_projection_expression_toplevel_syntax() we tested how
 # name references (#name) work in top-level attributes. In the following
@@ -299,7 +307,15 @@ def test_scan_projection_expression_path(test_table):
 # BatchGetItem also supports ProjectionExpression, let's test that it
 # applies to all items, and that it correctly suports document paths as well.
 def test_batch_get_item_projection_expression_path(test_table_s):
-    items = [{'p': random_string(), 'a': {'b': random_string(), 'x': 'hi'}, 'c': random_string()} for i in range(3)]
+    items = [
+        {
+            'p': random_string(),
+            'a': {'b': random_string(), 'x': 'hi'},
+            'c': random_string(),
+        }
+        for _ in range(3)
+    ]
+
     with test_table_s.batch_writer() as batch:
         for item in items:
             batch.put_item(item)
